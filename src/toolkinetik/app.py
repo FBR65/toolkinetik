@@ -47,17 +47,20 @@ def create_agent():  # pragma: no cover — lazy import, needs LLM backend
 
     Importing ``agno.agent.Agent`` at module level would require a configured
     LLM backend even for simple health/skill requests, so we defer it here.
+
+    Agno >= 2.x configures the LLM endpoint via an ``OpenAIChat`` model, not
+    via ``Agent(api_key=..., base_url=...)``.
     """
     from agno.agent import Agent
+    from agno.models.openai import OpenAIChat
 
     tools = registry.get_tools()
-    agent = Agent(
-        model=settings.OPENAI_MODEL,
-        tools=tools,
-        api_key=settings.OPENAI_API_KEY,
+    model = OpenAIChat(
+        id=settings.OPENAI_MODEL,
+        api_key=settings.OPENAI_API_KEY or None,
         base_url=settings.OPENAI_API_BASE,
     )
-    return agent
+    return Agent(model=model, tools=tools)
 
 
 # --- Routes ----------------------------------------------------------------

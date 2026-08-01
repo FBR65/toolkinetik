@@ -66,3 +66,25 @@ def test_reload_skills_returns_tool_list() -> None:
     data = response.json()
     assert "loaded_tools" in data
     assert isinstance(data["loaded_tools"], list)
+
+
+def test_create_agent_uses_openaichat_model() -> None:
+    """create_agent must build the LLM via OpenAIChat (agno >= 2 API).
+
+    Regression test: Agent(api_key=..., base_url=...) is no longer valid in
+    agno 2.x and raised a TypeError; the endpoint config now lives on the
+    model instance.
+    """
+    from toolkinetik.app import create_agent
+    from toolkinetik.config import get_settings
+    from toolkinetik.registry import DynamicToolRegistry
+
+    settings = get_settings()
+    agent = create_agent()
+
+    assert agent.model.id == settings.OPENAI_MODEL
+    assert agent.model.base_url == settings.OPENAI_API_BASE
+    assert agent.model.api_key == (settings.OPENAI_API_KEY or None)
+    assert agent.tools
+    expected = {t.__name__ for t in DynamicToolRegistry(settings.SKILLS_DIR).get_tools()}
+    assert {t.__name__ for t in agent.tools} == expected
