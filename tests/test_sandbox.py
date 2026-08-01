@@ -2,14 +2,11 @@
 
 from __future__ import annotations
 
-import os
-import tempfile
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from toolkinetik.sandbox import SandboxRunner
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -67,7 +64,7 @@ def patched_client():
 
 class TestRunCode:
     def test_run_code_success(self, patched_client):
-        client, container, _ = patched_client
+        _client, container, _ = patched_client
         container.wait.return_value = {"StatusCode": 0}
         container.logs.return_value = b"hello"
 
@@ -79,7 +76,7 @@ class TestRunCode:
         assert result["exit_code"] == 0
 
     def test_run_code_failure(self, patched_client):
-        client, container, _ = patched_client
+        _client, container, _ = patched_client
         container.wait.return_value = {"StatusCode": 1}
         container.logs.return_value = b"error message"
 
@@ -91,7 +88,7 @@ class TestRunCode:
 
     def test_run_code_timeout(self, patched_client):
         """When container.wait raises, cleanup still runs."""
-        client, container, _ = patched_client
+        _client, container, _ = patched_client
         container.wait.side_effect = Exception("timeout reached")
 
         sandbox = SandboxRunner()
@@ -106,7 +103,7 @@ class TestRunCode:
 
 class TestRunTests:
     def test_run_tests_success(self, patched_client):
-        client, container, _ = patched_client
+        _client, container, _ = patched_client
         container.wait.return_value = {"StatusCode": 0}
         container.logs.return_value = b"1 passed"
 
@@ -120,7 +117,7 @@ class TestRunTests:
         assert "1 passed" in result["stdout"]
 
     def test_run_tests_failure(self, patched_client):
-        client, container, _ = patched_client
+        _client, container, _ = patched_client
         container.wait.return_value = {"StatusCode": 1}
         container.logs.return_value = b"AssertionError: boom"
 
@@ -136,7 +133,7 @@ class TestRunTests:
 
 class TestSandboxConfig:
     def test_sandbox_uses_correct_image(self, patched_client):
-        client, container, _ = patched_client
+        client, _container, _ = patched_client
 
         sandbox = SandboxRunner()
         sandbox.run_code("print(1)")
@@ -145,7 +142,7 @@ class TestSandboxConfig:
         assert kwargs.get("image") == "python:3.12-slim"
 
     def test_sandbox_network_isolated(self, patched_client):
-        client, container, _ = patched_client
+        client, _container, _ = patched_client
 
         sandbox = SandboxRunner()
         sandbox.run_code("print(1)")
@@ -154,7 +151,7 @@ class TestSandboxConfig:
         assert kwargs.get("network_mode") == "none"
 
     def test_sandbox_memory_limited(self, patched_client):
-        client, container, _ = patched_client
+        client, _container, _ = patched_client
 
         sandbox = SandboxRunner()
         sandbox.run_code("print(1)")

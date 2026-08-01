@@ -6,9 +6,9 @@ import importlib
 import importlib.util
 import inspect
 import sys
+from collections.abc import Callable
 from glob import glob
 from pathlib import Path
-from typing import Callable, Dict, List
 
 
 class DynamicToolRegistry:
@@ -34,10 +34,10 @@ class DynamicToolRegistry:
             sys.path.insert(0, self.skills_dir)
 
         # Internal cache of loaded modules keyed by module name.
-        self._loaded_modules: Dict[str, object] = {}
-        self.registered_tools: Dict[str, Callable] = {}
+        self._loaded_modules: dict[str, object] = {}
+        self.registered_tools: dict[str, Callable] = {}
 
-    def get_tools(self) -> List[Callable]:
+    def get_tools(self) -> list[Callable]:
         """Scan ``skills_dir`` for ``*.py`` files and collect public callables.
 
         Returns a fresh list every call (supports hot reload).

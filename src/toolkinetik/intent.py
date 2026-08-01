@@ -10,14 +10,12 @@ close the create-test-promote loop autonomously.
 from __future__ import annotations
 
 import re
-from typing import Optional
 
 from toolkinetik.coding_agent import CodingAgent, CodingResult, SkillSpec
 from toolkinetik.promotion import SkillPromoter
 from toolkinetik.registry import DynamicToolRegistry
 from toolkinetik.sandbox import SandboxRunner
 from toolkinetik.tdd_loop import TDDLoop
-
 
 # ---------------------------------------------------------------------------
 # IntentDetector
@@ -27,12 +25,12 @@ from toolkinetik.tdd_loop import TDDLoop
 class IntentDetector:
     """Detect when a user request needs a skill that doesn't yet exist."""
 
-    def __init__(self, registry: Optional[DynamicToolRegistry] = None) -> None:
+    def __init__(self, registry: DynamicToolRegistry | None = None) -> None:
         self.registry = registry
 
     # -- public API ---------------------------------------------------------
 
-    def detect_missing_skill(self, user_request: str) -> Optional[SkillSpec]:
+    def detect_missing_skill(self, user_request: str) -> SkillSpec | None:
         """Return a SkillSpec if no existing tool matches, else None."""
         tool_names: list = []
         if self.registry is not None:

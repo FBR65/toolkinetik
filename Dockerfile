@@ -35,4 +35,4 @@ RUN uv sync --no-dev --no-install-project
 EXPOSE 8000 8080
 
 # Default command
-CMD ["uv", "run", "uvicorn", "toolkinetik.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uv", "run", "uvicorn", "toolkinetik.app:app", "--host", "0.0.0.0", "--port", "8000"]

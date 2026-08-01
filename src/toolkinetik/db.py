@@ -3,9 +3,9 @@
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class SkillStore:
@@ -44,7 +44,7 @@ class SkillStore:
 
     @staticmethod
     def _now() -> str:
-        return datetime.now(timezone.utc).isoformat()
+        return datetime.now(UTC).isoformat()
 
     def register_skill(
         self,
@@ -73,7 +73,7 @@ class SkillStore:
             )
             conn.commit()
 
-    def get_skill(self, name: str) -> Optional[Dict[str, Any]]:
+    def get_skill(self, name: str) -> dict[str, Any] | None:
         """Return skill metadata dict or None if not found."""
         with self._connect() as conn:
             row = conn.execute(
@@ -81,7 +81,7 @@ class SkillStore:
             ).fetchone()
             return dict(row) if row else None
 
-    def list_skills(self) -> List[Dict[str, Any]]:
+    def list_skills(self) -> list[dict[str, Any]]:
         """Return all active (non-deleted) skills."""
         with self._connect() as conn:
             rows = conn.execute(

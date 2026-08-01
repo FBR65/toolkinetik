@@ -10,11 +10,9 @@ from __future__ import annotations
 import ast
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
 
 from toolkinetik.config import get_settings
 from toolkinetik.db import SkillStore
-
 
 # ---------------------------------------------------------------------------
 # SkillInfo dataclass
@@ -39,8 +37,8 @@ class DocUpdater:
 
     def __init__(
         self,
-        skills_dir: Optional[str] = None,
-        db: Optional[SkillStore] = None,
+        skills_dir: str | None = None,
+        db: SkillStore | None = None,
         docs_dir: str = "docs",
     ) -> None:
         settings = get_settings()
@@ -56,7 +54,7 @@ class DocUpdater:
 
     def update_skill_docs(self) -> str:
         """Scan all skills, extract info, write docs/skills.md, return markdown."""
-        skill_infos: List[SkillInfo] = []
+        skill_infos: list[SkillInfo] = []
         skills_path = Path(self.skills_dir)
         if skills_path.exists():
             for py_file in sorted(skills_path.glob("*.py")):

@@ -13,16 +13,16 @@ def _make_store(tmp_path):
 
 
 def _sample_skill_kwargs():
-    return dict(
-        name="weather_skill",
-        module="skills.weather_skill",
-        function="get_current_weather",
-        description="Ruft das aktuelle Wetter ab.",
-        signature="get_current_weather(location: str) -> str",
-        version="1.0.0",
-        created_by="system",
-        git_commit="abc1234",
-    )
+    return {
+        "name": "weather_skill",
+        "module": "skills.weather_skill",
+        "function": "get_current_weather",
+        "description": "Ruft das aktuelle Wetter ab.",
+        "signature": "get_current_weather(location: str) -> str",
+        "version": "1.0.0",
+        "created_by": "system",
+        "git_commit": "abc1234",
+    }
 
 
 def test_register_skill(tmp_path):

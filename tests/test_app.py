@@ -11,9 +11,9 @@ import os
 # Set the API key BEFORE importing the app so Settings uses this value.
 os.environ["AGNO_API_KEY"] = "test-key-12345"
 
-from fastapi.testclient import TestClient  # noqa: E402
+from fastapi.testclient import TestClient
 
-from toolkinetik.app import app  # noqa: E402
+from toolkinetik.app import app
 
 AUTH_HEADERS = {"X-API-Key": "test-key-12345"}
 

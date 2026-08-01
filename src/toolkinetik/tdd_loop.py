@@ -3,16 +3,21 @@
 Task 3.2: TDDLoop pushes generated code + tests into the Docker sandbox,
 collects results, retries on failure (up to ``max_retries``), and runs an
 AST-based security scan before declaring success.
+
+Security checks are delegated to :class:`SafetyChecker` from ``safety.py``
+which checks both forbidden calls and forbidden imports.
 """
 
 from __future__ import annotations
 
-import ast
 from dataclasses import dataclass, field
-from typing import List
+from typing import TYPE_CHECKING
 
-from toolkinetik.coding_agent import SkillSpec
+from toolkinetik.safety import SafetyChecker, SafetyReport
 from toolkinetik.sandbox import SandboxRunner
+
+if TYPE_CHECKING:
+    from toolkinetik.coding_agent import CodingAgent, SkillSpec
 
 
 # ---------------------------------------------------------------------------
@@ -42,29 +47,25 @@ class TDDResult:
     error: str = ""
 
 
-# ---------------------------------------------------------------------------
-# Forbidden-call detection
-# ---------------------------------------------------------------------------
-
-# Call patterns flagged as unsafe.  Each entry is (module_attr_or_builtin, kind).
-# kind: "attr"  -> matches Name(func='X') where X is a builtin (eval/exec)
-#         "call" -> matches ast.Call whose func is an Attribute with attr == X
-_FORBIDDEN_BUILTINS = {"eval", "exec", "__import__"}
-_FORBIDDEN_ATTRS = {"system"}  # os.system — matched via Attribute attr
-_FORBIDDEN_MODULES_ATTRS = {
-    "system",  # os.system
-    "popen",   # os.popen
-}
-# subprocess.* — any attribute access on a name "subprocess" is flagged.
-_FORBIDDEN_MODULE_NAMES = {"subprocess"}
-
-
 class TDDLoop:
-    """Run generated code through sandbox tests + security checks with retries."""
+    """Run generated code through sandbox tests + security checks with retries.
 
-    def __init__(self, sandbox: SandboxRunner, max_retries: int = 3) -> None:
+    On test failure, if a :class:`CodingAgent` is provided, the loop generates
+    a debugging prompt from the traceback, calls the coding agent for revised
+    code, and retries with the new code.  This implements the retry-feedback
+    loop described in Task 4.
+    """
+
+    def __init__(
+        self,
+        sandbox: SandboxRunner,
+        max_retries: int = 3,
+        coding_agent: CodingAgent | None = None,
+    ) -> None:
         self.sandbox = sandbox
         self.max_retries = max_retries
+        self.coding_agent = coding_agent
+        self._safety_checker = SafetyChecker()
 
     # ------------------------------------------------------------------
     # Public API
@@ -76,22 +77,28 @@ class TDDLoop:
         Pushes *code* + *tests* to the sandbox repeatedly until tests pass or
         ``max_retries`` is exhausted.  On success, runs the security scan and
         only returns ``success=True`` if both tests and security pass.
+
+        When a :class:`CodingAgent` is wired in, test failures trigger a
+        debugging prompt that asks the agent for revised code.  The revised
+        code is then re-tested.
         """
         attempts = 0
         last_result: dict = {"exit_code": -1, "stdout": "", "stderr": ""}
         error_msg = ""
+        current_code = code
+        current_tests = tests
 
         for attempt in range(1, self.max_retries + 1):
             attempts = attempt
-            result = self.sandbox.run_tests(test_code=tests, skill_code=code)
+            result = self.sandbox.run_tests(test_code=current_tests, skill_code=current_code)
             last_result = result
             exit_code = int(result.get("exit_code", -1))
             stdout = str(result.get("stdout", ""))
             stderr = str(result.get("stderr", ""))
 
             if exit_code == 0:
-                # Tests passed — run security check.
-                sec = self._security_check(code)
+                # Tests passed — run security check via SafetyChecker.
+                sec = self._security_check(current_code)
                 return TDDResult(
                     success=sec.passed,
                     exit_code=exit_code,
@@ -102,8 +109,16 @@ class TDDLoop:
                     attempts=attempts,
                     error="" if sec.passed else "; ".join(sec.issues),
                 )
+
             # Tests failed — capture traceback for the retry hint.
             error_msg = self._extract_traceback(stdout, stderr)
+
+            # If we have a coding_agent and this isn't the last attempt,
+            # generate revised code using the debugging prompt.
+            if self.coding_agent is not None and attempt < self.max_retries:
+                revised = self._get_revised_code(spec, error_msg, current_code)
+                if revised is not None:
+                    current_code = revised
 
         # Exhausted retries.
         return TDDResult(
@@ -118,52 +133,49 @@ class TDDLoop:
         )
 
     # ------------------------------------------------------------------
-    # Security check
+    # Security check — delegated to SafetyChecker
     # ------------------------------------------------------------------
 
     def _security_check(self, code: str) -> SecurityResult:
-        """AST-parse *code* and flag forbidden calls.
-
-        Forbidden:
-          - ``os.system(...)``, ``os.popen(...)``
-          - any ``subprocess.<anything>``
-          - builtins: ``eval``, ``exec``, ``__import__``
-        """
-        issues: List[str] = []
-        try:
-            tree = ast.parse(code)
-        except SyntaxError as exc:
-            return SecurityResult(passed=False, issues=[f"syntax error: {exc}"])
-
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Call):
-                func = node.func
-                # Direct builtin call: eval(...), exec(...), __import__(...)
-                if isinstance(func, ast.Name) and func.id in _FORBIDDEN_BUILTINS:
-                    issues.append(f"forbidden builtin call: {func.id}()")
-                    continue
-                # Attribute call: os.system(...), subprocess.run(...), etc.
-                if isinstance(func, ast.Attribute):
-                    attr = func.attr
-                    # subprocess.* — flag by module name if value is a Name.
-                    value = func.value
-                    if isinstance(value, ast.Name) and value.id in _FORBIDDEN_MODULE_NAMES:
-                        issues.append(f"forbidden call: {value.id}.{attr}()")
-                        continue
-                    # os.system / os.popen — flag as os.<attr> when value is "os".
-                    if isinstance(value, ast.Name) and value.id == "os" and attr in _FORBIDDEN_ATTRS:
-                        issues.append(f"forbidden call: os.{attr}()")
-                        continue
-                    # Fallback: flag by attribute name alone (covers aliases).
-                    if attr in _FORBIDDEN_ATTRS:
-                        issues.append(f"forbidden call: .{attr}()")
-                        continue
-
-        return SecurityResult(passed=len(issues) == 0, issues=issues)
+        """Run the SafetyChecker on *code* and convert to SecurityResult."""
+        report: SafetyReport = self._safety_checker.check_code(code)
+        return SecurityResult(
+            passed=report.passed,
+            issues=list(report.issues),
+        )
 
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    def _get_revised_code(
+        self, spec: SkillSpec, error_trace: str, current_code: str
+    ) -> str | None:
+        """Ask the coding agent for revised code based on the error trace.
+
+        Returns the revised code string, or None if the agent couldn't
+        produce it.
+        """
+        if self.coding_agent is None:
+            return None
+        try:
+            debug_prompt = self.coding_agent._debugging_prompt(error_trace)
+            # Build a combined prompt: spec context + debug info + current code.
+            full_prompt = (
+                f"{debug_prompt}\n\n"
+                f"## Current Code\n```python\n{current_code}\n```\n\n"
+                f"## Skill Spec\n"
+                f"Name: {spec.name}\n"
+                f"Description: {spec.description}\n"
+                f"Signature: {spec.signature}\n\n"
+                "Output ONLY the corrected Python code, no explanations.\n"
+            )
+            revised = self.coding_agent._call_cli(full_prompt, self.coding_agent.cli_primary)
+            if revised and revised.strip():
+                return revised
+        except Exception:
+            pass
+        return None
 
     @staticmethod
     def _extract_traceback(stdout: str, stderr: str) -> str:

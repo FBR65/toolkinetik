@@ -43,6 +43,15 @@ pythonpath = ["src"]
 target-version = "py312"
 line-length = 120
 
+[tool.ruff.lint]
+ignore = [
+    "BLE001",   # blind except — legitimate for defensive error boundaries
+    "PLW1510",  # subprocess.run without check — intentional, we handle returncode
+    "RUF012",   # mutable class var — frozen-like sets, not mutated at runtime
+    "S110",     # try-except-pass — intentional silent cleanup
+    "PYI063",   # PEP 570 syntax — pydantic override signature
+]
+
 [tool.mypy]
 python_version = "3.12"
 ignore_missing_imports = true

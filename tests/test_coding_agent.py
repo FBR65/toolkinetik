@@ -8,16 +8,15 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from toolkinetik.coding_agent import (
+    DEFAULT_CLI_CONFIGS,
+    TASK_CLI_MAP,
     CodingAgent,
     CodingResult,
     QualityResult,
     SkillSpec,
-    DEFAULT_CLI_CONFIGS,
-    TASK_CLI_MAP,
     _cli_available,
     ensure_coding_cli,
 )
-
 
 # ---------------------------------------------------------------------------
 # Dataclass tests
@@ -91,9 +90,8 @@ def test_call_cli_timeout_raises():
     with patch(
         "toolkinetik.coding_agent.subprocess.run",
         side_effect=subprocess.TimeoutExpired(cmd="claude", timeout=5),
-    ):
-        with pytest.raises(subprocess.TimeoutExpired):
-            agent._call_cli("do something", "claude")
+    ), pytest.raises(subprocess.TimeoutExpired):
+        agent._call_cli("do something", "claude")
 
 
 # ---------------------------------------------------------------------------
@@ -264,8 +262,8 @@ def test_ensure_coding_cli_with_existing():
 
 def test_ensure_coding_cli_installs_aider():
     """If no CLI is available, ensure_coding_cli should install aider-chat."""
-    with patch("toolkinetik.coding_agent._cli_available", return_value=False):
-        with patch("toolkinetik.coding_agent.subprocess.run") as mock_run:
+    with patch("toolkinetik.coding_agent._cli_available", return_value=False), \
+         patch("toolkinetik.coding_agent.subprocess.run") as mock_run:
             mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
             result = ensure_coding_cli()
             assert result == "aider"

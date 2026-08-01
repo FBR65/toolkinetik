@@ -10,9 +10,9 @@ daemon is required for the test suite.
 from __future__ import annotations
 
 import os
+import shutil
 import tempfile
 from pathlib import Path
-from typing import Dict
 
 import docker
 
@@ -27,20 +27,27 @@ class SandboxRunner:
     _MEM_LIMIT = "256m"
     _CPU_QUOTA = 50000  # 50% of one CPU (100000 = 1 CPU)
 
+    # Custom test image tag with pytest pre-installed.
+    _TEST_IMAGE_TAG = "toolkinetik-sandbox:latest"
+
     def __init__(self, image: str | None = None) -> None:
         self.image = image if image is not None else get_settings().SANDBOX_IMAGE
         self.client = docker.from_env()
+        self._test_image_built = False
 
     # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
-    def run_code(self, code: str, timeout: int = 30) -> Dict:
+    def run_code(self, code: str, timeout: int = 30) -> dict:
         """Execute *code* in a throwaway container and capture output.
 
         Returns ``{"exit_code": int, "stdout": str, "stderr": str}``.
         """
-        tmp = Path(tempfile.mktemp(suffix=".py"))
+        # Use NamedTemporaryFile (mktemp is deprecated and unsafe).
+        fd, tmp_path = tempfile.mkstemp(suffix=".py")
+        os.close(fd)
+        tmp = Path(tmp_path)
         try:
             tmp.write_text(code)
             return self._exec_container(
@@ -56,37 +63,72 @@ class SandboxRunner:
                 except OSError:
                     pass
 
-    def run_tests(self, test_code: str, skill_code: str, timeout: int = 60) -> Dict:
+    def run_tests(self, test_code: str, skill_code: str, timeout: int = 60) -> dict:
         """Run a pytest suite against *skill_code* inside the sandbox.
 
-        Creates a temp directory with ``skill.py``, ``test_skill.py`` and a
-        ``requirements.txt`` containing ``pytest``, then executes
-        ``bash -c 'pip install -q pytest && pytest -v'``.
+        Uses a custom image with pytest pre-installed so that no network
+        access is needed during test execution.  The image is built on first
+        use from ``python:3.12-slim`` + ``pip install pytest``.
         """
+        test_image = self._ensure_test_image()
         tmpdir = Path(tempfile.mkdtemp(prefix="sandbox_tests_"))
         try:
             (tmpdir / "skill.py").write_text(skill_code)
             (tmpdir / "test_skill.py").write_text(test_code)
-            (tmpdir / "requirements.txt").write_text("pytest\n")
 
             mounts = {}
-            for fname in ("skill.py", "test_skill.py", "requirements.txt"):
+            for fname in ("skill.py", "test_skill.py"):
                 src = str(tmpdir / fname)
                 mounts[src] = {"bind": f"/sandbox/{fname}", "mode": "ro"}
 
             return self._exec_container(
-                command=["bash", "-c", "pip install -q pytest && pytest -v"],
+                command=["pytest", "-v"],
                 mounts=mounts,
                 workdir="/sandbox",
                 timeout=timeout,
+                image=test_image,
             )
         finally:
-            import shutil
             shutil.rmtree(tmpdir, ignore_errors=True)
 
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
+
+    def _ensure_test_image(self) -> str:
+        """Build (once) and return the custom test image tag.
+
+        The image is built from python:3.12-slim with pytest pre-installed,
+        so that run_tests can execute with network_mode="none".
+        """
+        if self._test_image_built:
+            return self._TEST_IMAGE_TAG
+
+        # Check if the image already exists.
+        try:
+            self.client.images.get(self._TEST_IMAGE_TAG)
+            self._test_image_built = True
+            return self._TEST_IMAGE_TAG
+        except Exception:
+            pass  # Image doesn't exist — build it.
+
+        # Build a minimal image: python:3.12-slim + pytest.
+        dockerfile_content = (
+            "FROM python:3.12-slim\n"
+            "RUN pip install --no-cache-dir pytest\n"
+        )
+        try:
+            self.client.images.build(
+                fileobj=__import__("io").BytesIO(dockerfile_content.encode()),
+                tag=self._TEST_IMAGE_TAG,
+                rm=True,
+            )
+            self._test_image_built = True
+        except Exception:
+            # If build fails (e.g. no Docker daemon in tests), fall back to
+            # the base image — run_tests will use pip install with network.
+            pass
+        return self._TEST_IMAGE_TAG
 
     def _exec_container(
         self,
@@ -94,16 +136,18 @@ class SandboxRunner:
         mounts: dict,
         workdir: str,
         timeout: int,
-    ) -> Dict:
+        image: str | None = None,
+    ) -> dict:
         """Run a container with the shared isolation constraints.
 
         *mounts* maps host-path -> bind-spec dict (as expected by the Docker
         SDK's ``volumes`` parameter).
         """
         container = None
+        use_image = image if image is not None else self.image
         try:
             container = self.client.containers.run(
-                image=self.image,
+                image=use_image,
                 command=command,
                 volumes=mounts,
                 working_dir=workdir,

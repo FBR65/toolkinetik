@@ -1,4 +1,4 @@
-"""NiceGUI dashboard for Agno Agent OS Control Center.
+"""NiceGUI dashboard for ToolKinetik Control Center.
 
 Structure:
     - Header (role="banner"): title + "Skills Neuladen" button
@@ -17,8 +17,8 @@ from toolkinetik.config import get_settings
 
 settings = get_settings()
 
-API_BASE = "http://localhost:8000"
-WS_URL = f"ws://localhost:8000/ws/chat?api_key={settings.AGNO_API_KEY}"
+API_BASE = settings.api_base_url
+WS_URL = f"{API_BASE.replace('http', 'ws', 1)}/ws/chat?api_key={settings.AGNO_API_KEY}"
 HEADERS = {"X-API-Key": settings.AGNO_API_KEY}
 
 # Theme colours
@@ -42,7 +42,7 @@ def main_page() -> None:
 
     # --- Header (role="banner") ------------------------------------------
     with ui.header().props('role="banner"'):
-        ui.label("Agno Agent OS Control Center").classes("text-xl font-bold")
+        ui.label("ToolKinetik Control Center").classes("text-xl font-bold")
         ui.button("Skills Neuladen", on_click=reload_skills).props(
             'aria-label="Skills neu laden"'
         ).classes("ml-auto")
@@ -55,13 +55,13 @@ def main_page() -> None:
                 'aria-live="polite" aria-label="Chat Nachrichten"'
             )
             with chat_container:
-                ui.label("Willkommen im Agno Agent OS Chat.").classes("text-gray-400")
+                ui.label("Willkommen im ToolKinetik Chat.").classes("text-gray-400")
 
             with ui.row().classes("w-full"):
                 chat_input = ui.input(
                     placeholder="Nachricht eingeben...",
                 ).props('aria-label="Chat Eingabefeld"').classes("flex-grow")
-                ui.button("Senden", on_click=lambda: send_message(chat_input)).props(
+                ui.button("Senden", on_click=lambda: send_message(chat_input, chat_container)).props(
                     'aria-label="Nachricht senden"'
                 )
 
@@ -75,7 +75,7 @@ def main_page() -> None:
             ui.label("Geladene Skills:").classes("mt-4")
             skill_list_container = ui.column().props('aria-label="Skill Liste"')
             with skill_list_container:
-                ui.label("(Neu laden für Aktualisierung)")
+                ui.label("(Neu laden fuer Aktualisierung)")
 
 
 # --- Action helpers --------------------------------------------------------
@@ -83,6 +83,7 @@ def main_page() -> None:
 async def reload_skills() -> None:
     """Trigger skill reload via the API."""
     import httpx
+    from nicegui import ui
 
     try:
         response = await httpx.AsyncClient().post(
@@ -92,29 +93,36 @@ async def reload_skills() -> None:
         )
         if response.status_code == 200:
             data = response.json()
-            print(f"Skills reloaded: {data.get('loaded_tools', [])}")
+            ui.notify(f"Skills neu geladen: {data.get('loaded_tools', [])}", color="positive")
         else:
-            print(f"Reload failed: {response.status_code}")
+            ui.notify(f"Reload failed: {response.status_code}", color="negative")
     except Exception as exc:
-        print(f"Reload error: {exc}")
+        ui.notify(f"Reload error: {exc}", color="negative")
 
 
-async def send_message(chat_input) -> None:
-    """Send a chat message via WebSocket."""
+async def send_message(chat_input, chat_container) -> None:
+    """Send a chat message via WebSocket and display the response."""
     import json
+
     import websockets
+    from nicegui import ui
 
     text = chat_input.value
     if not text:
         return
     chat_input.value = ""
     try:
+        with chat_container:
+            ui.chat_message(text, name="User", sent=True)
         async with websockets.connect(WS_URL) as ws:
             await ws.send(text)
             response = await ws.recv()
-            print(json.loads(response))
+            data = json.loads(response)
+            content = data.get("content", str(data)) if isinstance(data, dict) else str(data)
+            with chat_container:
+                ui.chat_message(content, name="ToolKinetik", avatar="robot", sent=False)
     except Exception as exc:
-        print(f"Chat error: {exc}")
+        ui.notify(f"Chat error: {exc}", color="negative")
 
 
 def run() -> None:
@@ -123,7 +131,7 @@ def run() -> None:
 
     ui.page("/")(main_page)
     ui.run(
-        title="Agno Agent OS Control Center",
+        title="ToolKinetik Control Center",
         dark=True,
         reload=False,
         port=8080,

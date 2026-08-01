@@ -8,11 +8,9 @@ file, marks the DB row as deleted, and re-triggers hot-reload.
 
 from __future__ import annotations
 
-import shutil
 import subprocess
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
 
 from toolkinetik.config import get_settings
 from toolkinetik.db import SkillStore
@@ -34,9 +32,9 @@ class SkillPromoter:
 
     def __init__(
         self,
-        skills_dir: Optional[str] = None,
-        registry: Optional[DynamicToolRegistry] = None,
-        db: Optional[SkillStore] = None,
+        skills_dir: str | None = None,
+        registry: DynamicToolRegistry | None = None,
+        db: SkillStore | None = None,
     ) -> None:
         settings = get_settings()
         self.skills_dir = skills_dir if skills_dir is not None else str(settings.skills_path)
@@ -54,7 +52,7 @@ class SkillPromoter:
         self,
         skill_name: str,
         code: str,
-        metadata: Optional[dict] = None,
+        metadata: dict | None = None,
     ) -> PromotionResult:
         """Write *code* to ``<skills_dir>/<skill_name>.py`` and register it."""
         skill_path = Path(self.skills_dir) / f"{skill_name}.py"

@@ -1,4 +1,4 @@
-"""Configuration settings for Agno Agent OS."""
+"""Configuration settings for ToolKinetik."""
 
 from __future__ import annotations
 
@@ -10,9 +10,36 @@ from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
-def _default_agno_api_key() -> str:
-    """Generate a random API key if not set in environment."""
-    return os.environ.get("AGNO_API_KEY", "") or secrets.token_urlsafe(32)
+def _api_key_file() -> Path:
+    """Return the path to the persisted API key file."""
+    return Path("data").resolve() / ".api_key"
+
+
+def _load_or_generate_api_key() -> str:
+    """Load the API key from the persisted file, or generate and persist a new one."""
+    # Check environment first — explicit env var always wins.
+    env_key = os.environ.get("AGNO_API_KEY", "") or os.environ.get("TOOLKINETIK_API_KEY", "")
+    if env_key:
+        return env_key
+
+    # Try to read the persisted key.
+    key_file = _api_key_file()
+    try:
+        if key_file.exists():
+            saved = key_file.read_text().strip()
+            if saved:
+                return saved
+    except OSError:
+        pass
+
+    # Generate a new key and persist it.
+    new_key = secrets.token_urlsafe(32)
+    try:
+        key_file.parent.mkdir(parents=True, exist_ok=True)
+        key_file.write_text(new_key)
+    except OSError:
+        pass  # If we can't persist, still return the generated key for this session.
+    return new_key
 
 
 class Settings(BaseSettings):
@@ -29,20 +56,24 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     OPENAI_MODEL: str = "gpt-4o"
 
-    # Agno settings
+    # ToolKinetik settings
     AGNO_API_KEY: str = ""
 
     # Sandbox settings
     SANDBOX_IMAGE: str = "python:3.12-slim"
+    SANDBOX_TEST_IMAGE: str = "toolkinetik-sandbox:latest"
+
+    # API URL for CLI/UI to reach the core engine
+    TOOLKINETIK_API_URL: str = "http://localhost:8000"
 
     # Paths
     SKILLS_DIR: str = "skills/"
     DB_PATH: str = "data/toolkinetik.db"
 
     def model_post_init(self, __context: object) -> None:  # type: ignore[override]
-        """Generate AGNO_API_KEY if still empty after env load."""
+        """Generate/persist AGNO_API_KEY if still empty after env load."""
         if not self.AGNO_API_KEY:
-            object.__setattr__(self, "AGNO_API_KEY", secrets.token_urlsafe(32))
+            object.__setattr__(self, "AGNO_API_KEY", _load_or_generate_api_key())
 
     @property
     def skills_path(self) -> Path:
@@ -51,6 +82,11 @@ class Settings(BaseSettings):
     @property
     def db_full_path(self) -> Path:
         return Path(self.DB_PATH).resolve()
+
+    @property
+    def api_base_url(self) -> str:
+        """Base URL for reaching the core engine API."""
+        return self.TOOLKINETIK_API_URL
 
 
 @lru_cache

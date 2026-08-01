@@ -13,8 +13,6 @@ import re
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import List, Optional
-
 
 # ---------------------------------------------------------------------------
 # SafetyReport dataclass
@@ -75,9 +73,9 @@ class SafetyChecker:
         Returns a SafetyReport.  If the code has a syntax error, the report
         has ``passed=False`` with an issue describing the error.
         """
-        issues: List[str] = []
-        forbidden_calls: List[str] = []
-        forbidden_imports: List[str] = []
+        issues: list[str] = []
+        forbidden_calls: list[str] = []
+        forbidden_imports: list[str] = []
 
         try:
             tree = ast.parse(code)
@@ -98,14 +96,13 @@ class SafetyChecker:
                         forbidden_imports.append(f"import {alias.name}")
                         issues.append(f"forbidden import: {alias.name}")
 
-            elif isinstance(node, ast.ImportFrom):
-                if node.module:
-                    root_name = node.module.split(".")[0]
-                    if root_name in self.FORBIDDEN_IMPORTS:
-                        # Report the full from-import module.
-                        imported = node.module
-                        forbidden_imports.append(f"from {imported} import ...")
-                        issues.append(f"forbidden import: {imported}")
+            elif isinstance(node, ast.ImportFrom) and node.module:
+                root_name = node.module.split(".")[0]
+                if root_name in self.FORBIDDEN_IMPORTS:
+                    # Report the full from-import module.
+                    imported = node.module
+                    forbidden_imports.append(f"from {imported} import ...")
+                    issues.append(f"forbidden import: {imported}")
 
             # -- Check forbidden calls ----------------------------------
             if isinstance(node, ast.Call):
@@ -168,7 +165,7 @@ class SkillVersionManager:
 
     _VERSION_PATTERN = re.compile(r"#\s*VERSION:\s*(\d+\.\d+\.\d+)")
 
-    def __init__(self, skills_dir: Optional[str] = None) -> None:
+    def __init__(self, skills_dir: str | None = None) -> None:
         self.skills_dir = Path(skills_dir) if skills_dir else Path("skills")
         if not self.skills_dir.exists():
             self.skills_dir.mkdir(parents=True, exist_ok=True)

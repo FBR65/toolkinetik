@@ -20,7 +20,7 @@ def test_ui_has_page_decorator() -> None:
     """The module defines a main_page function."""
     mod = importlib.import_module("toolkinetik.ui")
     assert hasattr(mod, "main_page")
-    assert callable(getattr(mod, "main_page"))
+    assert callable(mod.main_page)
 
 
 def test_ui_api_base_constant() -> None:

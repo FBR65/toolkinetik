@@ -5,10 +5,8 @@ All httpx calls are mocked so no real server connection is needed.
 
 from __future__ import annotations
 
-import json
 from unittest.mock import MagicMock, patch
 
-import httpx
 from typer.testing import CliRunner
 
 from toolkinetik.cli import app

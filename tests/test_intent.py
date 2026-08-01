@@ -4,12 +4,9 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from toolkinetik.coding_agent import CodingResult, SkillSpec
 from toolkinetik.intent import IntentDetector, SkillCreationOrchestrator
 from toolkinetik.tdd_loop import TDDResult
-
 
 # ---------------------------------------------------------------------------
 # Helpers

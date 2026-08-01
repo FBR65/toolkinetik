@@ -1,4 +1,4 @@
-"""Typer + Rich CLI for Agno Agent OS.
+"""Typer + Rich CLI for ToolKinetik.
 
 Commands:
     health                     Check FastAPI backend health
@@ -24,7 +24,7 @@ API_BASE = "http://localhost:8000"
 HEADERS = {"X-API-Key": settings.AGNO_API_KEY}
 
 # --- Typer apps ------------------------------------------------------------
-app = typer.Typer(help="Agno Agent OS CLI", no_args_is_help=True)
+app = typer.Typer(help="ToolKinetik CLI", no_args_is_help=True)
 skills_app = typer.Typer(help="Manage skills", no_args_is_help=True)
 sandbox_app = typer.Typer(help="Sandbox management", no_args_is_help=True)
 
@@ -97,7 +97,7 @@ def skills_create(
     description: str = typer.Argument(..., help="Description of what the skill does"),
 ) -> None:
     """Request a new skill (prints the request for now)."""
-    console.print(f"[bold cyan]Skill creation request:[/]")
+    console.print("[bold cyan]Skill creation request:[/]")
     console.print(f"  Name:        {name}")
     console.print(f"  Description: {description}")
     console.print("[dim](Not yet implemented — this will trigger the coding agent.)[/]")

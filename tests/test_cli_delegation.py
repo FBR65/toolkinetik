@@ -13,7 +13,6 @@ from toolkinetik.coding_agent import (
     CLIDelegator,
 )
 
-
 # ---------------------------------------------------------------------------
 # Init / config tests
 # ---------------------------------------------------------------------------
@@ -25,7 +24,7 @@ def test_cli_delegator_init():
     assert "codex" in delegator.cli_configs
     assert "opencode" in delegator.cli_configs
     # Each config must have command, args, timeout
-    for name, cfg in delegator.cli_configs.items():
+    for cfg in delegator.cli_configs.values():
         assert "command" in cfg
         assert "args" in cfg
         assert "timeout" in cfg

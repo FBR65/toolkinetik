@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from toolkinetik.promotion import SkillPromoter, PromotionResult
+from toolkinetik.promotion import PromotionResult, SkillPromoter
 
 
 @pytest.fixture

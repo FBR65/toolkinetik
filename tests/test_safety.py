@@ -2,15 +2,11 @@
 
 from __future__ import annotations
 
-import subprocess
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from toolkinetik.safety import SafetyChecker, SafetyReport, SkillVersionManager
-
 
 # ---------------------------------------------------------------------------
 # Helpers

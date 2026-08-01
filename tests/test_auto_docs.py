@@ -5,10 +5,7 @@ from __future__ import annotations
 from pathlib import Path
 from tempfile import TemporaryDirectory
 
-import pytest
-
 from toolkinetik.auto_docs import DocUpdater, SkillInfo
-
 
 # ---------------------------------------------------------------------------
 # Helpers

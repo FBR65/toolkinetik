@@ -14,8 +14,7 @@ import ast
 import shutil
 import subprocess
 from dataclasses import dataclass, field
-from typing import Optional
-
+from pathlib import Path
 
 # ---------------------------------------------------------------------------
 # Dataclasses
@@ -84,18 +83,26 @@ def ensure_coding_cli() -> str:
     Checks claude, codex, opencode, aider in order. If none is found,
     installs aider-chat via ``uv add aider-chat`` and returns "aider".
     Returns the name of the first available CLI.
+
+    Raises RuntimeError if the installation fails.
     """
     for cli_name in ["claude", "codex", "opencode", "aider"]:
         if _cli_available(cli_name):
             return cli_name
 
     # No CLI found — install aider-chat as fallback
-    subprocess.run(
+    proc = subprocess.run(
         ["uv", "add", "aider-chat"],
         capture_output=True,
         text=True,
         timeout=120,
+        check=False,
     )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            f"No coding CLI found and aider-chat installation failed "
+            f"(exit code {proc.returncode}): {proc.stderr or proc.stdout}"
+        )
     return "aider"
 
 
@@ -115,7 +122,7 @@ class CodingAgent:
     def __init__(
         self,
         cli_primary: str = "",
-        cli_fallbacks: Optional[list] = None,
+        cli_fallbacks: list | None = None,
         timeout: int = 300,
     ) -> None:
         # Auto-detect available CLI; install aider-chat if none found
@@ -350,9 +357,8 @@ class CodingAgent:
         return proc.stdout
 
     @staticmethod
-    def _find_agents_md() -> Optional["object"]:
+    def _find_agents_md() -> Path | None:
         """Locate AGENTS.md in the project root (cwd or parent of src/)."""
-        from pathlib import Path
         candidates = [
             Path.cwd() / "AGENTS.md",
             Path.cwd().parent / "AGENTS.md",
@@ -376,7 +382,7 @@ class CLIDelegator:
     falls back through the remaining CLIs if the primary fails.
     """
 
-    def __init__(self, cli_configs: Optional[dict] = None) -> None:
+    def __init__(self, cli_configs: dict | None = None) -> None:
         self.cli_configs = cli_configs if cli_configs is not None else dict(DEFAULT_CLI_CONFIGS)
 
     def delegate(self, task_type: str, prompt: str) -> str:
@@ -386,6 +392,8 @@ class CLIDelegator:
         Returns the output text, or an error string if all CLIs fail.
         """
         cli_list = TASK_CLI_MAP.get(task_type, TASK_CLI_MAP.get("feature"))
+        if cli_list is None:
+            cli_list = TASK_CLI_MAP.get("feature", ["claude"])
         for cli_name in cli_list:
             output, success = self._try_cli(cli_name, prompt)
             if success:

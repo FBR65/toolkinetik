@@ -4,10 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock
 
-import pytest
-
 from toolkinetik.coding_agent import SkillSpec
-from toolkinetik.tdd_loop import TDDLoop, TDDResult, SecurityResult
+from toolkinetik.tdd_loop import TDDLoop, TDDResult
 
 
 def _make_sandbox(exit_code: int = 0, stdout: str = "1 passed", stderr: str = "") -> MagicMock:

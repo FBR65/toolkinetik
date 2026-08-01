@@ -1,4 +1,4 @@
-"""FastAPI core engine for Agno Agent OS.
+"""FastAPI core engine for ToolKinetik.
 
 Endpoints:
     GET  /api/health       — no auth, returns {"status": "healthy"}
@@ -10,9 +10,8 @@ Endpoints:
 from __future__ import annotations
 
 import json
-from typing import Optional
 
-from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect, Security
+from fastapi import Depends, FastAPI, Security, WebSocket, WebSocketDisconnect
 from fastapi.security import APIKeyHeader
 
 from toolkinetik.config import get_settings
@@ -23,13 +22,13 @@ settings = get_settings()
 registry = DynamicToolRegistry(settings.SKILLS_DIR)
 
 # --- FastAPI app -----------------------------------------------------------
-app = FastAPI(title="Agno Agent OS", version="0.1.0")
+app = FastAPI(title="ToolKinetik", version="0.1.0")
 
 # API-Key security scheme
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
-def verify_api_key(api_key: Optional[str] = Security(api_key_header)) -> str:
+def verify_api_key(api_key: str | None = Security(api_key_header)) -> str:
     """Dependency that validates the X-API-Key header."""
     if api_key is None or api_key != settings.AGNO_API_KEY:
         from fastapi import HTTPException
@@ -72,7 +71,7 @@ async def health() -> dict:
 @app.post("/api/reload-skills", dependencies=[Depends(verify_api_key)])
 async def reload_skills() -> dict:
     """Hot-reload skills from the skills directory."""
-    tools = registry.get_tools()
+    registry.get_tools()
     return {"status": "success", "loaded_tools": _tool_names()}
 
 
