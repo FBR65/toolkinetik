@@ -62,13 +62,41 @@ DEFAULT_CLI_CONFIGS: dict = {
     "claude": {"command": "claude", "args": ["--print"], "timeout": 300},
     "codex": {"command": "codex", "args": [], "timeout": 300},
     "opencode": {"command": "opencode", "args": [], "timeout": 300},
+    "aider": {"command": "aider", "args": ["--no-auto-commits", "--yes"], "timeout": 300},
 }
 
 TASK_CLI_MAP: dict = {
-    "feature": ["claude", "codex", "opencode"],
-    "fix": ["codex", "claude", "opencode"],
-    "refactor": ["opencode", "claude", "codex"],
+    "feature": ["claude", "codex", "opencode", "aider"],
+    "fix": ["codex", "claude", "opencode", "aider"],
+    "refactor": ["opencode", "claude", "codex", "aider"],
 }
+
+
+def _cli_available(cli_name: str) -> bool:
+    """Check whether a CLI binary is available on PATH."""
+    config = DEFAULT_CLI_CONFIGS.get(cli_name, {"command": cli_name})
+    return shutil.which(config["command"]) is not None
+
+
+def ensure_coding_cli() -> str:
+    """Ensure at least one coding CLI is available.
+
+    Checks claude, codex, opencode, aider in order. If none is found,
+    installs aider-chat via ``uv add aider-chat`` and returns "aider".
+    Returns the name of the first available CLI.
+    """
+    for cli_name in ["claude", "codex", "opencode", "aider"]:
+        if _cli_available(cli_name):
+            return cli_name
+
+    # No CLI found — install aider-chat as fallback
+    subprocess.run(
+        ["uv", "add", "aider-chat"],
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    return "aider"
 
 
 # ---------------------------------------------------------------------------
@@ -86,14 +114,18 @@ class CodingAgent:
 
     def __init__(
         self,
-        cli_primary: str = "claude",
+        cli_primary: str = "",
         cli_fallbacks: Optional[list] = None,
         timeout: int = 300,
     ) -> None:
+        # Auto-detect available CLI; install aider-chat if none found
+        if not cli_primary:
+            cli_primary = ensure_coding_cli()
         self.cli_primary = cli_primary
         self.cli_fallbacks = cli_fallbacks if cli_fallbacks is not None else [
             "codex",
             "opencode",
+            "aider",
         ]
         self.timeout = timeout
 
@@ -290,12 +322,21 @@ class CodingAgent:
     def _call_cli(self, prompt: str, cli_name: str) -> str:
         """Call *cli_name* via subprocess, returning its stdout.
 
+        For aider, the project's AGENTS.md is passed as a read-only file
+        so the coding agent follows the project's operational rules.
+
         Raises ``subprocess.TimeoutExpired`` on timeout so callers can
         fall back to the next CLI.
         """
         config = DEFAULT_CLI_CONFIGS.get(cli_name, {"command": cli_name, "args": [], "timeout": self.timeout})
         command = [config["command"]] + list(config.get("args", []))
         timeout = config.get("timeout", self.timeout)
+
+        # Aider: pass AGENTS.md as context file
+        if cli_name == "aider":
+            agents_md = self._find_agents_md()
+            if agents_md:
+                command += ["--read", str(agents_md)]
 
         proc = subprocess.run(
             command,
@@ -307,6 +348,20 @@ class CodingAgent:
         if proc.returncode != 0:
             return proc.stderr or proc.stdout or ""
         return proc.stdout
+
+    @staticmethod
+    def _find_agents_md() -> Optional["object"]:
+        """Locate AGENTS.md in the project root (cwd or parent of src/)."""
+        from pathlib import Path
+        candidates = [
+            Path.cwd() / "AGENTS.md",
+            Path.cwd().parent / "AGENTS.md",
+            Path(__file__).resolve().parent.parent.parent / "AGENTS.md",
+        ]
+        for c in candidates:
+            if c.is_file():
+                return c
+        return None
 
 
 # ---------------------------------------------------------------------------
