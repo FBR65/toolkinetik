@@ -15,7 +15,7 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
-from agno_agent_os.config import get_settings
+from toolkinetik.config import get_settings
 
 console = Console()
 settings = get_settings()

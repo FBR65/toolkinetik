@@ -14,9 +14,9 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Optional
 
-from agno_agent_os.config import get_settings
-from agno_agent_os.db import SkillStore
-from agno_agent_os.registry import DynamicToolRegistry
+from toolkinetik.config import get_settings
+from toolkinetik.db import SkillStore
+from toolkinetik.registry import DynamicToolRegistry
 
 
 @dataclass

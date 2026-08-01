@@ -12,8 +12,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional
 
-from agno_agent_os.config import get_settings
-from agno_agent_os.db import SkillStore
+from toolkinetik.config import get_settings
+from toolkinetik.db import SkillStore
 
 
 # ---------------------------------------------------------------------------

@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agno_agent_os.coding_agent import (
+from toolkinetik.coding_agent import (
     CodingAgent,
     CodingResult,
     QualityResult,
@@ -73,7 +73,7 @@ def test_call_cli_with_mock():
     mock_completed.stdout = "generated code here"
     mock_completed.stderr = ""
     mock_completed.returncode = 0
-    with patch("agno_agent_os.coding_agent.subprocess.run", return_value=mock_completed) as mock_run:
+    with patch("toolkinetik.coding_agent.subprocess.run", return_value=mock_completed) as mock_run:
         output = agent._call_cli("do something", "claude")
     assert output == "generated code here"
     mock_run.assert_called_once()
@@ -85,7 +85,7 @@ def test_call_cli_timeout_raises():
     """_call_cli should raise TimeoutExpired so create_skill can fall back."""
     agent = CodingAgent(cli_primary="claude", timeout=5)
     with patch(
-        "agno_agent_os.coding_agent.subprocess.run",
+        "toolkinetik.coding_agent.subprocess.run",
         side_effect=subprocess.TimeoutExpired(cmd="claude", timeout=5),
     ):
         with pytest.raises(subprocess.TimeoutExpired):

@@ -37,7 +37,7 @@ class Settings(BaseSettings):
 
     # Paths
     SKILLS_DIR: str = "skills/"
-    DB_PATH: str = "data/agno_agent_os.db"
+    DB_PATH: str = "data/toolkinetik.db"
 
     def model_post_init(self, __context: object) -> None:  # type: ignore[override]
         """Generate AGNO_API_KEY if still empty after env load."""

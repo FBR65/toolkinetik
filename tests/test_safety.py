@@ -9,7 +9,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agno_agent_os.safety import SafetyChecker, SafetyReport, SkillVersionManager
+from toolkinetik.safety import SafetyChecker, SafetyReport, SkillVersionManager
 
 
 # ---------------------------------------------------------------------------
@@ -222,7 +222,7 @@ class TestSkillVersionManager:
             mock_proc.stdout = git_output
 
             with patch(
-                "agno_agent_os.safety.subprocess.run",
+                "toolkinetik.safety.subprocess.run",
                 return_value=mock_proc,
             ) as mock_run:
                 history = vm.get_history("hskill")
@@ -246,7 +246,7 @@ class TestSkillVersionManager:
             mock_proc.stdout = ""
 
             with patch(
-                "agno_agent_os.safety.subprocess.run",
+                "toolkinetik.safety.subprocess.run",
                 return_value=mock_proc,
             ):
                 history = vm.get_history("empty")

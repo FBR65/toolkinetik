@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agno_agent_os.promotion import SkillPromoter, PromotionResult
+from toolkinetik.promotion import SkillPromoter, PromotionResult
 
 
 @pytest.fixture

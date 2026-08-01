@@ -8,7 +8,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agno_agent_os.sandbox import SandboxRunner
+from toolkinetik.sandbox import SandboxRunner
 
 
 # ---------------------------------------------------------------------------
@@ -59,7 +59,7 @@ def _decode_logs(raw) -> str:
 @pytest.fixture
 def patched_client():
     """Patch docker.from_env so SandboxRunner can be instantiated without Docker."""
-    with patch("agno_agent_os.sandbox.docker") as mock_docker:
+    with patch("toolkinetik.sandbox.docker") as mock_docker:
         client, container = _make_mock_client()
         mock_docker.from_env.return_value = client
         yield client, container, mock_docker

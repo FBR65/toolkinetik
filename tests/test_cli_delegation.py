@@ -7,7 +7,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from agno_agent_os.coding_agent import (
+from toolkinetik.coding_agent import (
     DEFAULT_CLI_CONFIGS,
     TASK_CLI_MAP,
     CLIDelegator,
@@ -87,7 +87,7 @@ def test_try_cli_success():
     mock_completed.stdout = "output from cli"
     mock_completed.stderr = ""
     mock_completed.returncode = 0
-    with patch("agno_agent_os.coding_agent.subprocess.run", return_value=mock_completed):
+    with patch("toolkinetik.coding_agent.subprocess.run", return_value=mock_completed):
         output, success = delegator._try_cli("claude", "do work")
     assert success is True
     assert output == "output from cli"
@@ -99,7 +99,7 @@ def test_try_cli_failure():
     mock_completed.stdout = ""
     mock_completed.stderr = "error happened"
     mock_completed.returncode = 1
-    with patch("agno_agent_os.coding_agent.subprocess.run", return_value=mock_completed):
+    with patch("toolkinetik.coding_agent.subprocess.run", return_value=mock_completed):
         output, success = delegator._try_cli("claude", "do work")
     assert success is False
     assert "error" in output
@@ -108,7 +108,7 @@ def test_try_cli_failure():
 def test_try_cli_not_found():
     delegator = CLIDelegator()
     with patch(
-        "agno_agent_os.coding_agent.subprocess.run",
+        "toolkinetik.coding_agent.subprocess.run",
         side_effect=FileNotFoundError("claude not found"),
     ):
         output, success = delegator._try_cli("claude", "do work")
@@ -119,7 +119,7 @@ def test_try_cli_not_found():
 def test_try_cli_timeout():
     delegator = CLIDelegator()
     with patch(
-        "agno_agent_os.coding_agent.subprocess.run",
+        "toolkinetik.coding_agent.subprocess.run",
         side_effect=subprocess.TimeoutExpired(cmd="claude", timeout=1),
     ):
         output, success = delegator._try_cli("claude", "do work")
@@ -138,7 +138,7 @@ def test_delegate_with_mock():
     mock_completed.stdout = "feature done"
     mock_completed.stderr = ""
     mock_completed.returncode = 0
-    with patch("agno_agent_os.coding_agent.subprocess.run", return_value=mock_completed) as mock_run:
+    with patch("toolkinetik.coding_agent.subprocess.run", return_value=mock_completed) as mock_run:
         result = delegator.delegate("feature", "implement login")
     assert result == "feature done"
     mock_run.assert_called_once()
@@ -154,7 +154,7 @@ def test_delegate_fix_uses_codex():
     mock_completed.stdout = "fix applied"
     mock_completed.stderr = ""
     mock_completed.returncode = 0
-    with patch("agno_agent_os.coding_agent.subprocess.run", return_value=mock_completed) as mock_run:
+    with patch("toolkinetik.coding_agent.subprocess.run", return_value=mock_completed) as mock_run:
         result = delegator.delegate("fix", "fix memory leak")
     assert result == "fix applied"
     call_args = mock_run.call_args
@@ -168,7 +168,7 @@ def test_delegate_refactor_uses_opencode():
     mock_completed.stdout = "refactored"
     mock_completed.stderr = ""
     mock_completed.returncode = 0
-    with patch("agno_agent_os.coding_agent.subprocess.run", return_value=mock_completed) as mock_run:
+    with patch("toolkinetik.coding_agent.subprocess.run", return_value=mock_completed) as mock_run:
         result = delegator.delegate("refactor", "simplify module")
     assert result == "refactored"
     call_args = mock_run.call_args
@@ -192,7 +192,7 @@ def test_delegate_fallback():
     success_result.returncode = 0
 
     with patch(
-        "agno_agent_os.coding_agent.subprocess.run",
+        "toolkinetik.coding_agent.subprocess.run",
         side_effect=[fail_result, success_result],
     ) as mock_run:
         result = delegator.delegate("feature", "build feature X")
@@ -216,7 +216,7 @@ def test_delegate_all_fail():
     fail_result.returncode = 1
 
     with patch(
-        "agno_agent_os.coding_agent.subprocess.run",
+        "toolkinetik.coding_agent.subprocess.run",
         side_effect=[
             fail_result,
             fail_result,
@@ -235,6 +235,6 @@ def test_delegate_unknown_task_type():
     mock_completed.stdout = "output"
     mock_completed.stderr = ""
     mock_completed.returncode = 0
-    with patch("agno_agent_os.coding_agent.subprocess.run", return_value=mock_completed):
+    with patch("toolkinetik.coding_agent.subprocess.run", return_value=mock_completed):
         result = delegator.delegate("unknown_type", "do something")
     assert result == "output"

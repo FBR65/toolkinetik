@@ -1,4 +1,4 @@
-# Agno Agent OS
+# ToolKinetik
 
 Selbsterweiterndes Agentenframework.
 
@@ -17,7 +17,7 @@ cp .env.example .env
 
 ## Architecture
 
-- **src/agno_agent_os/** — Core framework
+- **src/toolkinetik/** — Core framework
 - **skills/** — Dynamic skill modules (hot-reloadable)
 - **data/** — SQLite metadata store
 - **tests/** — Test suite

@@ -11,7 +11,7 @@ module is importable without starting a server.
 
 from __future__ import annotations
 
-from agno_agent_os.config import get_settings
+from toolkinetik.config import get_settings
 
 # --- Constants (module level, importable without starting a server) --------
 

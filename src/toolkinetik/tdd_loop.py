@@ -11,8 +11,8 @@ import ast
 from dataclasses import dataclass, field
 from typing import List
 
-from agno_agent_os.coding_agent import SkillSpec
-from agno_agent_os.sandbox import SandboxRunner
+from toolkinetik.coding_agent import SkillSpec
+from toolkinetik.sandbox import SandboxRunner
 
 
 # ---------------------------------------------------------------------------

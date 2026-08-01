@@ -7,7 +7,7 @@ from tempfile import TemporaryDirectory
 
 import pytest
 
-from agno_agent_os.auto_docs import DocUpdater, SkillInfo
+from toolkinetik.auto_docs import DocUpdater, SkillInfo
 
 
 # ---------------------------------------------------------------------------

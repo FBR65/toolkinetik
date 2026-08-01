@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import time
 
-from agno_agent_os.db import SkillStore
+from toolkinetik.db import SkillStore
 
 
 def _make_store(tmp_path):

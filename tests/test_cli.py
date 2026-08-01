@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 import httpx
 from typer.testing import CliRunner
 
-from agno_agent_os.cli import app
+from toolkinetik.cli import app
 
 runner = CliRunner()
 
@@ -22,7 +22,7 @@ def test_health_command() -> None:
     mock_response.status_code = 200
     mock_response.json.return_value = {"status": "healthy"}
 
-    with patch("agno_agent_os.cli.httpx.get", return_value=mock_response):
+    with patch("toolkinetik.cli.httpx.get", return_value=mock_response):
         result = runner.invoke(app, ["health"])
 
     assert result.exit_code == 0
@@ -35,7 +35,7 @@ def test_skills_list_command() -> None:
     mock_response.status_code = 200
     mock_response.json.return_value = {"tools": ["get_current_weather", "calculate_fibonacci"]}
 
-    with patch("agno_agent_os.cli.httpx.get", return_value=mock_response):
+    with patch("toolkinetik.cli.httpx.get", return_value=mock_response):
         result = runner.invoke(app, ["skills", "list"])
 
     assert result.exit_code == 0
@@ -48,7 +48,7 @@ def test_skills_reload_command() -> None:
     mock_response.status_code = 200
     mock_response.json.return_value = {"status": "success", "loaded_tools": ["echo"]}
 
-    with patch("agno_agent_os.cli.httpx.post", return_value=mock_response):
+    with patch("toolkinetik.cli.httpx.post", return_value=mock_response):
         result = runner.invoke(app, ["skills", "reload"])
 
     assert result.exit_code == 0

@@ -6,9 +6,9 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from agno_agent_os.coding_agent import CodingResult, SkillSpec
-from agno_agent_os.intent import IntentDetector, SkillCreationOrchestrator
-from agno_agent_os.tdd_loop import TDDResult
+from toolkinetik.coding_agent import CodingResult, SkillSpec
+from toolkinetik.intent import IntentDetector, SkillCreationOrchestrator
+from toolkinetik.tdd_loop import TDDResult
 
 
 # ---------------------------------------------------------------------------

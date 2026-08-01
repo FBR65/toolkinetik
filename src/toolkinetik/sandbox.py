@@ -16,7 +16,7 @@ from typing import Dict
 
 import docker
 
-from agno_agent_os.config import get_settings
+from toolkinetik.config import get_settings
 
 
 class SandboxRunner:

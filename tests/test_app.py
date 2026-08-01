@@ -13,7 +13,7 @@ os.environ["AGNO_API_KEY"] = "test-key-12345"
 
 from fastapi.testclient import TestClient  # noqa: E402
 
-from agno_agent_os.app import app  # noqa: E402
+from toolkinetik.app import app  # noqa: E402
 
 AUTH_HEADERS = {"X-API-Key": "test-key-12345"}
 

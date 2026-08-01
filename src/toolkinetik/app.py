@@ -15,8 +15,8 @@ from typing import Optional
 from fastapi import Depends, FastAPI, WebSocket, WebSocketDisconnect, Security
 from fastapi.security import APIKeyHeader
 
-from agno_agent_os.config import get_settings
-from agno_agent_os.registry import DynamicToolRegistry
+from toolkinetik.config import get_settings
+from toolkinetik.registry import DynamicToolRegistry
 
 # --- Settings & registry --------------------------------------------------
 settings = get_settings()

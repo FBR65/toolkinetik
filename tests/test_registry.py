@@ -5,7 +5,7 @@ from __future__ import annotations
 import textwrap
 from pathlib import Path
 
-from agno_agent_os.registry import DynamicToolRegistry
+from toolkinetik.registry import DynamicToolRegistry
 
 
 def _write_skill(path: Path, code: str) -> None:

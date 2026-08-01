@@ -12,11 +12,11 @@ from __future__ import annotations
 import re
 from typing import Optional
 
-from agno_agent_os.coding_agent import CodingAgent, CodingResult, SkillSpec
-from agno_agent_os.promotion import SkillPromoter
-from agno_agent_os.registry import DynamicToolRegistry
-from agno_agent_os.sandbox import SandboxRunner
-from agno_agent_os.tdd_loop import TDDLoop
+from toolkinetik.coding_agent import CodingAgent, CodingResult, SkillSpec
+from toolkinetik.promotion import SkillPromoter
+from toolkinetik.registry import DynamicToolRegistry
+from toolkinetik.sandbox import SandboxRunner
+from toolkinetik.tdd_loop import TDDLoop
 
 
 # ---------------------------------------------------------------------------
