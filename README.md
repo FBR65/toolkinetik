@@ -25,17 +25,20 @@ User Interfaces (NiceGUI / CLI)
   |                 |                |
   v                 v                v
 Execution       Coding Agent      Sandbox (Docker)
-Runtime         (Claude Code)     TDD + Security
-(Dynamic        -> Plan           -> Test
- Skills)        -> TDD            -> Promote
-                -> Review         -> Rollback
+Runtime         (Claude Code      TDD + Security
+(Dynamic        -> Codex          -> Test
+Skills)        -> OpenCode       -> Promote
+              -> Aider*)        -> Rollback
+
+  *) Aider is auto-installed via `uv add aider-chat` when no other coding CLI is found.
+      AGENTS.md is passed to Aider as a read-only context file.
 ```
 
 ### Skill-Creation Loop
 
 1. User sends a request the system cannot fulfill.
 2. Intent detector identifies the missing capability and generates a skill specification.
-3. Coding agent (Claude Code CLI, with Codex/OpenCode fallback) writes code and tests following TDD methodology.
+3. Coding agent (Claude Code CLI, with Codex/OpenCode/Aider fallback) writes code and tests following TDD methodology. If no CLI is installed, Aider is automatically installed via `uv add aider-chat`. The project's `AGENTS.md` is passed to Aider as a read-only context file so the coding agent follows the project's operational rules.
 4. Sandbox runs pytest and security checks in an isolated Docker container.
 5. On success: skill is promoted to the production registry, hot-reloaded, and the original request is executed.
 6. On failure: traceback is fed back to the coding agent for debugging (up to 3 retries).
@@ -155,7 +158,7 @@ Services:
 |---|---|
 | Agent Core | Agno (formerly Phidata) |
 | LLM Backend | OpenAI-compatible endpoint (user-configurable) |
-| Coding Agent | Claude Code CLI (primary), Codex/OpenCode (fallback) |
+| Coding Agent | Claude Code CLI (primary), Codex/OpenCode/Aider (fallback, auto-installed) |
 | Sandbox | Docker SDK for Python |
 | API | FastAPI + WebSockets + API-key auth |
 | Web UI | NiceGUI + public-ui (accessibility) |
