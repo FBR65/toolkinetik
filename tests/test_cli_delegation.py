@@ -237,3 +237,24 @@ def test_delegate_unknown_task_type():
     with patch("toolkinetik.coding_agent.subprocess.run", return_value=mock_completed):
         result = delegator.delegate("unknown_type", "do something")
     assert result == "output"
+
+
+def test_delegate_empty_task_cli_map():
+    """delegate handles a missing TASK_CLI_MAP entry gracefully."""
+    delegator = CLIDelegator()
+    mock_completed = MagicMock()
+    mock_completed.stdout = "output"
+    mock_completed.stderr = ""
+    mock_completed.returncode = 0
+    with patch("toolkinetik.coding_agent.TASK_CLI_MAP", {}), \
+         patch("toolkinetik.coding_agent.subprocess.run", return_value=mock_completed):
+        result = delegator.delegate("anything", "do something")
+    assert result == "output"
+
+
+def test_try_cli_unknown_cli():
+    """_try_cli returns an error tuple for an unknown CLI name."""
+    delegator = CLIDelegator(cli_configs={})
+    output, success = delegator._try_cli("ghost", "do work")
+    assert success is False
+    assert "Unknown CLI" in output

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -94,6 +95,28 @@ def test_call_cli_timeout_raises():
         agent._call_cli("do something", "claude")
 
 
+def test_call_cli_nonzero_return_returns_stderr():
+    """_call_cli returns stderr when the CLI exits non-zero."""
+    agent = CodingAgent(cli_primary="claude")
+    mock = MagicMock(returncode=1, stdout="", stderr="compile error")
+    with patch("toolkinetik.coding_agent.subprocess.run", return_value=mock):
+        output = agent._call_cli("do something", "claude")
+    assert output == "compile error"
+
+
+def test_call_cli_aider_passes_agents_md():
+    """_call_cli passes AGENTS.md to aider as a read-only context file."""
+    agent = CodingAgent(cli_primary="aider")
+    with patch.object(agent, "_find_agents_md", return_value=Path("/tmp/AGENTS.md")) as find, \
+         patch("toolkinetik.coding_agent.subprocess.run") as mock_run:
+        mock_run.return_value = MagicMock(returncode=0, stdout="ok", stderr="")
+        agent._call_cli("prompt", "aider")
+    find.assert_called_once()
+    command = mock_run.call_args[0][0]
+    assert "--read" in command
+    assert "/tmp/AGENTS.md" in command
+
+
 # ---------------------------------------------------------------------------
 # create_skill tests
 # ---------------------------------------------------------------------------
@@ -154,6 +177,48 @@ def test_create_skill_all_clis_fail():
         result = agent.create_skill(spec)
     assert result.success is False
     assert result.error != ""
+
+
+def test_create_skill_empty_primary_output_falls_back():
+    """Empty output from the primary CLI must fall back to the next CLI."""
+    spec = SkillSpec(name="x", description="d", signature="f() -> None")
+    agent = CodingAgent(cli_primary="claude", cli_fallbacks=["codex"])
+    with patch.object(
+        agent,
+        "_call_cli",
+        side_effect=["", "def f() -> None:\n    return None\n", "def test_f(): pass\n"],
+    ):
+        result = agent.create_skill(spec)
+    assert result.success is True
+    assert result.cli_used == "codex"
+
+
+def test_create_skill_tests_generation_exception():
+    """create_skill tolerates a failure when generating tests."""
+    spec = SkillSpec(name="x", description="d", signature="f() -> None")
+    agent = CodingAgent(cli_primary="claude")
+    with patch.object(
+        agent,
+        "_call_cli",
+        side_effect=["def f() -> None:\n    return None\n", RuntimeError("boom")],
+    ):
+        result = agent.create_skill(spec)
+    assert result.success is True
+    assert result.tests == ""
+
+
+def test_create_skill_ast_invalid_rejects():
+    """create_skill fails when the generated code has a syntax error."""
+    spec = SkillSpec(name="x", description="d", signature="f() -> None")
+    agent = CodingAgent(cli_primary="claude")
+    with patch.object(
+        agent,
+        "_call_cli",
+        side_effect=["def f(:\n  return", "def test_f(): pass\n"],
+    ):
+        result = agent.create_skill(spec)
+    assert result.success is False
+    assert "AST validation failed" in result.error
 
 
 # ---------------------------------------------------------------------------
@@ -254,6 +319,24 @@ def test_quality_gates_ruff_check():
     assert result.ast_valid is True
 
 
+def test_quality_gates_ruff_exception():
+    """_run_quality_gates catches ruff subprocess exceptions."""
+    agent = CodingAgent(cli_primary="claude")
+    with patch("toolkinetik.coding_agent.shutil.which", return_value="/usr/bin/ruff"), \
+         patch("toolkinetik.coding_agent.subprocess.run", side_effect=OSError("boom")):
+        result = agent._run_quality_gates("def f(): return 1\n")
+    assert result.ruff_passed is False
+
+
+def test_quality_gates_mypy_exception():
+    """_run_quality_gates catches mypy subprocess exceptions."""
+    agent = CodingAgent(cli_primary="claude")
+    with patch("toolkinetik.coding_agent.shutil.which", side_effect=lambda b: "/usr/bin/ruff" if b == "ruff" else "/usr/bin/mypy"), \
+         patch("toolkinetik.coding_agent.subprocess.run", side_effect=OSError("boom")):
+        result = agent._run_quality_gates("def f(): return 1\n")
+    assert result.mypy_passed is False
+
+
 # ---------------------------------------------------------------------------
 # CLI availability and aider fallback tests
 # ---------------------------------------------------------------------------
@@ -299,6 +382,24 @@ def test_ensure_coding_cli_installs_aider():
             assert mock_run.call_args[0][0] == ["uv", "add", "aider-chat"]
 
 
+def test_ensure_coding_cli_raises_on_install_failure():
+    """ensure_coding_cli raises RuntimeError when aider install fails."""
+    from toolkinetik.coding_agent import ensure_coding_cli
+    with patch("toolkinetik.coding_agent._cli_available", return_value=False), \
+         patch("toolkinetik.coding_agent.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="install failed")
+            with pytest.raises(RuntimeError):
+                ensure_coding_cli()
+
+
+def test_coding_agent_empty_primary_auto_detects():
+    """CodingAgent without a primary CLI auto-detects via ensure_coding_cli."""
+    from toolkinetik.coding_agent import ensure_coding_cli
+    with patch("toolkinetik.coding_agent.ensure_coding_cli", return_value="codex"):
+        agent = CodingAgent()
+        assert agent.cli_primary == "codex"
+
+
 def test_find_agents_md_locates_file(tmp_path):
     """_find_agents_md should locate AGENTS.md in the project root."""
     agents_file = tmp_path / "AGENTS.md"
@@ -323,3 +424,9 @@ def test_find_agents_md_returns_none_if_missing(tmp_path):
         assert result is None or result.name == "AGENTS.md"
     finally:
         __import__("os").chdir(original_cwd)
+
+
+def test_find_agents_md_no_candidates():
+    """_find_agents_md returns None when no candidate AGENTS.md exists."""
+    with patch("toolkinetik.coding_agent.Path.is_file", return_value=False):
+        assert CodingAgent._find_agents_md() is None

@@ -51,6 +51,19 @@ def test_list_skills_without_key() -> None:
     assert response.status_code == 403
 
 
+def test_list_skills_ensures_loaded() -> None:
+    """GET /api/skills must load tools when the registry is empty."""
+    from toolkinetik import app as app_module
+    from toolkinetik.registry import DynamicToolRegistry
+
+    # Force an empty registry to hit the lazy-load branch.
+    with patch.object(app_module, "registry", DynamicToolRegistry("skills")):
+        with TestClient(app) as client:
+            response = client.get("/api/skills", headers=AUTH_HEADERS)
+        assert response.status_code == 200
+        assert "tools" in response.json()
+
+
 def test_list_skills_with_key() -> None:
     """GET /api/skills with correct key returns 200."""
     with TestClient(app) as client:

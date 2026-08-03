@@ -30,31 +30,26 @@ Persistiert und reproduzierbar: `scripts/gauntlet.sh` (Einstiegspunkt, rerunt al
 
 | Layer | Befehl | Ergebnis (frisch) |
 |---|---|---|
-| Full suite (random order) | `uv run pytest tests/ -q` (pytest-randomly) | **153 passed, 1 warning** |
+| Full suite (random order) | `uv run pytest tests/ -q` (pytest-randomly) | **173 passed, 1 warning** |
 | Static types | `uv run mypy src` | **Success, no issues found in 14 source files** |
 | Lint | `uv run ruff check src` | **All checks passed** |
-| Changed-line coverage | `--cov` auf die 4 geänderten Module | **93% Gesamt; ALLE geänderten Zeilen abgedeckt** (Nachweis unten) |
+| Changed-line coverage | `--cov` auf die 4 geänderten Module | **100% — ALLE Zeilen abgedeckt** (Nachweis unten) |
 | Real execution | `check_skill_file` auf `math_skill.py` & `weather_skill.py` | **beide passed=True** (Whitelist bricht echte Skills nicht) |
 | Suite health | 3 wiederholte Läufe | **3× ok** (deterministisch) |
 
-### Coverage — Changed-Line-Nachweis (pytest-cov, installiert)
-Die Coverage-Schwelle ist **Changed-Line-Coverage**, nicht globaler % — pro AGENTS.md
-ist "Global % ist Eitelkeit". Verbleibende ungedeckte Zeilen wurden gegen `git diff d0a91ac 9cb3093`
-abgeglichen und sind alle **präexistent** (nicht von dieser SPEC geändert):
+### Coverage — Regel-8-Korrektur
+**Regel 8 (AGENTS.md) verlangt: jede ungedeckte Zeile auf der Arbeitsfläche wird gedeckt,
+nicht als "präexistent" abgetan.** Eine frühere EVIDENCE-Version verletzte das, indem sie
+verbleibende ungedeckte Zeilen als "nicht von dieser SPEC geändert" wegargumentierte. Das
+wurde zurückgenommen: **alle** ungedeckten Zeilen der vier betroffenen Module sind jetzt
+durch Tests gedeckt → **100 % (411/411)**:
 
-| Modul | Cover | Ungedeckt | Ungedeckt davon geändert? |
+| Modul | Vorher | Nachher | Hinzugefügte Tests |
 |---|---|---|---|
-| `app.py` | 98% | 87 (`registry.get_tools()` im reload-Handler) | nein |
-| `coding_agent.py` | 89% | 102,130,195-196,215-216,221,320-322,339-341,368-370,380,394,420,438 | nein (alle präexistent) |
-| `safety.py` | 94% | 183-186,202,232,269-270 | nein (präexistent) |
-| `tdd_loop.py` | 97% | 160,168 | nein (präexistent) |
-
-**Changed-Line-Coverage = 100%**: Lücken in safety (134-136 ImportFrom-Disallow), app
-(95 WS-compare_digest), coding_agent (159-160 revise_code except-Pfad) wurden durch neue
-Tests geschlossen:
-`test_whitelist_blocks_disallowed_from_import`, `test_whitelist_allows_stdlib_from_import`,
-`test_websocket_rejects_invalid_key`, `test_websocket_accepts_valid_key`,
-`test_revise_code_returns_none_on_cli_error`.
+| `app.py` | 98% (87) | **100%** | `test_list_skills_ensures_loaded`, WS-Tests |
+| `safety.py` | 94% | **100%** | `test_attr_to_string_nested/fallback`, `test_version_manager_creates_dir`, `test_version_manager_bump_non_semver`, `test_version_manager_history_git_error` |
+| `coding_agent.py` | 89% | **100%** | `test_ensure_coding_cli_raises...`, `test_coding_agent_empty_primary_auto_detects`, `test_create_skill_empty_primary_output_falls_back`, `test_create_skill_tests_generation_exception`, `test_create_skill_ast_invalid_rejects`, `test_quality_gates_ruff/mypy_exception`, `test_call_cli_nonzero_return_returns_stderr`, `test_call_cli_aider_passes_agents_md`, `test_find_agents_md_no_candidates`, delegator-Edge-Cases |
+| `tdd_loop.py` | 97% | **100%** | `test_get_revised_code_returns_none_without_agent`, `test_extract_traceback_no_output` |
 
 ### Mutation — manuell (kein Mutationstool im Projekt)
 Per AGENTS.md-Fallback. Jeder Mutant als einplausibler Bug, einzeln eingebracht,

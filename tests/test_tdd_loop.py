@@ -123,3 +123,14 @@ class TestTDDLoopRevision:
         assert result.attempts == 2
         # The retry must have invoked the public revise_code entry point.
         agent.revise_code.assert_called_once()
+
+
+def test_get_revised_code_returns_none_without_agent():
+    """_get_revised_code returns None when no coding agent is wired in."""
+    loop = TDDLoop(_make_sandbox(), max_retries=3)
+    assert loop._get_revised_code(_spec(), "trace", "code") is None
+
+
+def test_extract_traceback_no_output():
+    """_extract_traceback returns a fallback message when output is empty."""
+    assert TDDLoop._extract_traceback("", "") == "tests failed (no output)"

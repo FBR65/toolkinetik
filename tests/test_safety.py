@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 from pathlib import Path
 from tempfile import TemporaryDirectory
 from unittest.mock import MagicMock, patch
@@ -86,6 +87,19 @@ class TestSafetyForbiddenCalls:
         report = checker.check_code(code)
         assert report.passed is False
         assert "__import__" in report.forbidden_calls
+
+    def test_attr_to_string_nested_attribute(self):
+        """_attr_to_string recurses into nested attributes (os.path.join)."""
+        tree = ast.parse("os.path.join('a')")
+        call = next(n for n in ast.walk(tree) if isinstance(n, ast.Call))
+        assert SafetyChecker._attr_to_string(call.func) == "os.path.join"
+
+    def test_attr_to_string_fallback(self):
+        """_attr_to_string falls back to the bare attr for complex expressions."""
+        # `"x".join(...)` — the attribute's value is a Constant, not Name/Attribute.
+        tree = ast.parse('",".join(parts)')
+        call = next(n for n in ast.walk(tree) if isinstance(n, ast.Call))
+        assert SafetyChecker._attr_to_string(call.func) == "join"
 
 
 # ---------------------------------------------------------------------------
@@ -307,6 +321,36 @@ class TestSkillVersionManager:
                 return_value=mock_proc,
             ):
                 history = vm.get_history("empty")
+            assert history == []
+
+    def test_version_manager_creates_dir(self):
+        """SkillVersionManager creates the skills dir when missing."""
+        with TemporaryDirectory() as d:
+            sub = Path(d) / "nested" / "skills"
+            assert not sub.exists()
+            SkillVersionManager(skills_dir=str(sub))
+            assert sub.exists()
+
+    def test_version_manager_bump_non_semver(self):
+        """bump_version falls back to 1.1.0 when the version isn't 3-part."""
+        with TemporaryDirectory() as d:
+            (Path(d) / "weird.py").write_text("# VERSION: 2\ndef weird(): pass\n")
+            vm = SkillVersionManager(skills_dir=d)
+            # Force get_version to return a malformed, non-3-part value.
+            with patch.object(vm, "get_version", return_value="2"):
+                assert vm.bump_version("weird") == "1.1.0"
+
+    def test_version_manager_history_git_error(self):
+        """get_history returns empty list when git raises."""
+        with TemporaryDirectory() as d:
+            (Path(d) / "err.py").write_text("def err(): pass\n")
+            vm = SkillVersionManager(skills_dir=d)
+
+            with patch(
+                "toolkinetik.safety.subprocess.run",
+                side_effect=OSError("no git"),
+            ):
+                history = vm.get_history("err")
             assert history == []
 
 
