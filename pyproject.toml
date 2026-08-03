@@ -55,3 +55,9 @@ ignore = [
 [tool.mypy]
 python_version = "3.12"
 ignore_missing_imports = true
+
+[dependency-groups]
+dev = [
+    "pytest-cov>=7.1.0",
+    "pytest-randomly>=4.1.0",
+]

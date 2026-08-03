@@ -160,6 +160,22 @@ class TestSafetyWhitelistImports:
         assert report.passed is False
         assert any("pathlib" in fi for fi in report.forbidden_imports)
 
+    def test_whitelist_blocks_disallowed_from_import(self):
+        """From-import of a disallowed module must be flagged (B1)."""
+        checker = SafetyChecker()
+        code = "from urllib import request\n"
+        report = checker.check_code(code)
+        assert report.passed is False
+        assert any("urllib" in fi for fi in report.forbidden_imports)
+        assert any("disallowed import" in i for i in report.issues)
+
+    def test_whitelist_allows_stdlib_from_import(self):
+        """From-import of an allowed stdlib module must pass (B1)."""
+        checker = SafetyChecker()
+        code = "from math import sqrt\n"
+        report = checker.check_code(code)
+        assert report.passed is True
+
     def test_whitelist_allows_relative_skill_import(self):
         checker = SafetyChecker()
         code = "from .math_skill import calculate_fibonacci\n"

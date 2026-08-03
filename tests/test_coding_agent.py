@@ -208,6 +208,15 @@ def test_revise_code_returns_none_on_empty_output():
     assert revised is None
 
 
+def test_revise_code_returns_none_on_cli_error():
+    """revise_code should return None when the CLI raises (B5)."""
+    spec = SkillSpec(name="adder", description="Add", signature="add(a, b) -> int")
+    agent = CodingAgent(cli_primary="claude")
+    with patch.object(agent, "_call_cli", side_effect=RuntimeError("boom")):
+        revised = agent.revise_code("code", "trace", spec)
+    assert revised is None
+
+
 def test_code_review_prompt():
     agent = CodingAgent(cli_primary="claude")
     prompt = agent._code_review_prompt("def f(): pass")
