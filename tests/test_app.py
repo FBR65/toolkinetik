@@ -11,6 +11,9 @@ import os
 # Set the API key BEFORE importing the app so Settings uses this value.
 os.environ["AGNO_API_KEY"] = "test-key-12345"
 
+from unittest.mock import patch
+
+import pytest
 from fastapi.testclient import TestClient
 
 from toolkinetik.app import app
@@ -66,6 +69,25 @@ def test_reload_skills_returns_tool_list() -> None:
     data = response.json()
     assert "loaded_tools" in data
     assert isinstance(data["loaded_tools"], list)
+
+
+def test_api_key_uses_constant_time_compare() -> None:
+    """API-key verification must use a timing-safe comparison (B2)."""
+    from toolkinetik.app import verify_api_key
+    from fastapi import HTTPException
+
+    with patch("toolkinetik.app.secrets.compare_digest", wraps=__import__("secrets").compare_digest) as mock:
+        with pytest.raises(HTTPException) as excinfo:
+            verify_api_key("wrong-key")
+        assert excinfo.value.status_code == 403
+    assert mock.called
+
+
+def test_api_key_correct_value_accepted() -> None:
+    """Correct API key must still authenticate (regression)."""
+    from toolkinetik.app import verify_api_key
+
+    assert verify_api_key("test-key-12345") == "test-key-12345"
 
 
 def test_create_agent_uses_openaichat_model() -> None:

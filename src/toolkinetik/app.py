@@ -10,6 +10,7 @@ Endpoints:
 from __future__ import annotations
 
 import json
+import secrets
 
 from fastapi import Depends, FastAPI, Security, WebSocket, WebSocketDisconnect
 from fastapi.security import APIKeyHeader
@@ -30,7 +31,7 @@ api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 def verify_api_key(api_key: str | None = Security(api_key_header)) -> str:
     """Dependency that validates the X-API-Key header."""
-    if api_key is None or api_key != settings.AGNO_API_KEY:
+    if api_key is None or not secrets.compare_digest(api_key, settings.AGNO_API_KEY):
         from fastapi import HTTPException
 
         raise HTTPException(status_code=403, detail="Invalid or missing API key")
@@ -91,7 +92,7 @@ async def list_skills() -> dict:
 async def ws_chat(websocket: WebSocket) -> None:
     """WebSocket chat endpoint — auth via ?api_key= query param."""
     api_key = websocket.query_params.get("api_key")
-    if api_key is None or api_key != settings.AGNO_API_KEY:
+    if api_key is None or not secrets.compare_digest(api_key, settings.AGNO_API_KEY):
         await websocket.close(code=1008)  # policy violation
         return
 
