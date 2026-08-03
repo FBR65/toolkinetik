@@ -132,7 +132,7 @@ class SandboxRunner:
 
     def _exec_container(
         self,
-        command: list,
+        command: list[str],
         mounts: dict,
         workdir: str,
         timeout: int,

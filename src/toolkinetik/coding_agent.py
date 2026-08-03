@@ -28,7 +28,7 @@ class SkillSpec:
     name: str
     description: str
     signature: str
-    test_cases: list = field(default_factory=list)
+    test_cases: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -49,7 +49,7 @@ class QualityResult:
     ruff_passed: bool
     mypy_passed: bool
     ast_valid: bool
-    issues: list = field(default_factory=list)
+    issues: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +122,7 @@ class CodingAgent:
     def __init__(
         self,
         cli_primary: str = "",
-        cli_fallbacks: list | None = None,
+        cli_fallbacks: list[str] | None = None,
         timeout: int = 300,
     ) -> None:
         # Auto-detect available CLI; install aider-chat if none found
@@ -268,7 +268,7 @@ class CodingAgent:
 
     def _run_quality_gates(self, code: str) -> QualityResult:
         """Run ruff, mypy, and AST validation on *code*."""
-        issues: list = []
+        issues: list[str] = []
 
         # AST validation — always runs, deterministic
         ast_valid = True

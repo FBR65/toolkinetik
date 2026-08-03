@@ -32,7 +32,7 @@ class IntentDetector:
 
     def detect_missing_skill(self, user_request: str) -> SkillSpec | None:
         """Return a SkillSpec if no existing tool matches, else None."""
-        tool_names: list = []
+        tool_names: list[str] = []
         if self.registry is not None:
             try:
                 tools = self.registry.get_tools()
@@ -72,7 +72,7 @@ class IntentDetector:
         # Join with underscores.
         return "_".join(words)
 
-    def _match_tools(self, request: str, tool_names: list) -> bool:
+    def _match_tools(self, request: str, tool_names: list[str]) -> bool:
         """Return True if any tool name keyword appears in the request."""
         request_lower = request.lower()
         for tool_name in tool_names:

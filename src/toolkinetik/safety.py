@@ -24,9 +24,9 @@ class SafetyReport:
     """Outcome of a safety check on a piece of code."""
 
     passed: bool
-    issues: list = field(default_factory=list)
-    forbidden_calls: list = field(default_factory=list)
-    forbidden_imports: list = field(default_factory=list)
+    issues: list[str] = field(default_factory=list)
+    forbidden_calls: list[str] = field(default_factory=list)
+    forbidden_imports: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -245,7 +245,7 @@ class SkillVersionManager:
 
         return new_version
 
-    def get_history(self, skill_name: str) -> list:
+    def get_history(self, skill_name: str) -> list[dict[str, str]]:
         """Return git log history for the skill file as a list of dicts.
 
         Each dict has keys: ``commit`` (sha), ``message`` (str), ``date`` (str).
@@ -272,7 +272,7 @@ class SkillVersionManager:
         if proc.returncode != 0:
             return []
 
-        history: list = []
+        history: list[dict[str, str]] = []
         for line in proc.stdout.strip().splitlines():
             parts = line.split("|", 2)
             if len(parts) == 3:

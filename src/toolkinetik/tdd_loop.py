@@ -30,7 +30,7 @@ class SecurityResult:
     """Outcome of the static security scan."""
 
     passed: bool
-    issues: list = field(default_factory=list)
+    issues: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -42,7 +42,7 @@ class TDDResult:
     stdout: str
     stderr: str
     security_passed: bool
-    security_issues: list = field(default_factory=list)
+    security_issues: list[str] = field(default_factory=list)
     attempts: int = 0
     error: str = ""
 

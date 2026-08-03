@@ -24,7 +24,7 @@ class SkillInfo:
     """Extracted metadata for a single skill module."""
 
     module_name: str
-    functions: list = field(default_factory=list)  # list of {"name","docstring","args","return_type"}
+    functions: list[dict[str, str]] = field(default_factory=list)  # {"name","docstring","args","return_type"}
 
 
 # ---------------------------------------------------------------------------
@@ -72,7 +72,7 @@ class DocUpdater:
 
         return markdown
 
-    def update_readme_table(self, skill_infos: list) -> str:
+    def update_readme_table(self, skill_infos: list[SkillInfo]) -> str:
         """Generate a markdown table from *skill_infos*.
 
         Returns the markdown table string (with header + separator + rows).
@@ -119,7 +119,7 @@ class DocUpdater:
         except (SyntaxError, OSError):
             return SkillInfo(module_name=module_name, functions=[])
 
-        functions: list = []
+        functions: list[dict[str, str]] = []
         for node in ast.iter_child_nodes(tree):
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
@@ -144,7 +144,7 @@ class DocUpdater:
     @staticmethod
     def _format_args(node) -> str:
         """Format the argument list of a function node as a string."""
-        parts: list = []
+        parts: list[str] = []
 
         # Positional / standard arguments
         for arg in node.args.args:
