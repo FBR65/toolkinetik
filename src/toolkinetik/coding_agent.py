@@ -138,6 +138,30 @@ class CodingAgent:
 
     # -- public API ---------------------------------------------------------
 
+    def revise_code(self, code: str, error_trace: str, spec: SkillSpec) -> str | None:
+        """Ask the coding agent to revise *code* based on *error_trace*.
+
+        Returns the revised code string, or ``None`` if the CLI produced no
+        usable output.
+        """
+        debug_prompt = self._debugging_prompt(error_trace)
+        full_prompt = (
+            f"{debug_prompt}\n\n"
+            f"## Current Code\n```python\n{code}\n```\n\n"
+            f"## Skill Spec\n"
+            f"Name: {spec.name}\n"
+            f"Description: {spec.description}\n"
+            f"Signature: {spec.signature}\n\n"
+            "Output ONLY the corrected Python code, no explanations.\n"
+        )
+        try:
+            revised = self._call_cli(full_prompt, self.cli_primary)
+        except Exception:
+            return None
+        if revised and revised.strip():
+            return revised
+        return None
+
     def create_skill(self, spec: SkillSpec) -> CodingResult:
         """Generate code + tests for *spec* using TDD methodology.
 

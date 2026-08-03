@@ -158,24 +158,7 @@ class TDDLoop:
         """
         if self.coding_agent is None:
             return None
-        try:
-            debug_prompt = self.coding_agent._debugging_prompt(error_trace)
-            # Build a combined prompt: spec context + debug info + current code.
-            full_prompt = (
-                f"{debug_prompt}\n\n"
-                f"## Current Code\n```python\n{current_code}\n```\n\n"
-                f"## Skill Spec\n"
-                f"Name: {spec.name}\n"
-                f"Description: {spec.description}\n"
-                f"Signature: {spec.signature}\n\n"
-                "Output ONLY the corrected Python code, no explanations.\n"
-            )
-            revised = self.coding_agent._call_cli(full_prompt, self.coding_agent.cli_primary)
-            if revised and revised.strip():
-                return revised
-        except Exception:
-            pass
-        return None
+        return self.coding_agent.revise_code(current_code, error_trace, spec)
 
     @staticmethod
     def _extract_traceback(stdout: str, stderr: str) -> str:

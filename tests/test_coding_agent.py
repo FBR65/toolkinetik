@@ -189,6 +189,25 @@ def test_debugging_prompt():
     assert "root cause" in prompt.lower() or "phase" in prompt.lower()
 
 
+def test_revise_code_returns_revised_code():
+    """revise_code should delegate to the CLI and return its output."""
+    spec = SkillSpec(name="adder", description="Add", signature="add(a, b) -> int")
+    agent = CodingAgent(cli_primary="claude")
+    with patch.object(agent, "_call_cli", return_value="def add(a, b):\n    return a + b\n") as mock_cli:
+        revised = agent.revise_code("def add(a, b):\n    return a - b\n", "AssertionError", spec)
+    assert revised == "def add(a, b):\n    return a + b\n"
+    mock_cli.assert_called_once()
+
+
+def test_revise_code_returns_none_on_empty_output():
+    """revise_code should return None when the CLI returns empty output."""
+    spec = SkillSpec(name="adder", description="Add", signature="add(a, b) -> int")
+    agent = CodingAgent(cli_primary="claude")
+    with patch.object(agent, "_call_cli", return_value="   \n"):
+        revised = agent.revise_code("code", "trace", spec)
+    assert revised is None
+
+
 def test_code_review_prompt():
     agent = CodingAgent(cli_primary="claude")
     prompt = agent._code_review_prompt("def f(): pass")

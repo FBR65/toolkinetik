@@ -100,3 +100,26 @@ class TestRetries:
         assert result.success is False
         assert result.attempts == 3
         assert sb.run_tests.call_count == 3
+
+
+class TestTDDLoopRevision:
+    def test_tdd_loop_uses_public_revise_code(self):
+        """TDDLoop must drive revision through CodingAgent.revise_code (B5).
+
+        First attempt fails, the agent revises, second attempt passes.
+        """
+        sb = MagicMock()
+        sb.run_tests.side_effect = [
+            {"exit_code": 1, "stdout": "", "stderr": "AssertionError: boom"},
+            {"exit_code": 0, "stdout": "1 passed", "stderr": ""},
+        ]
+        agent = MagicMock()
+        agent.revise_code.return_value = "def add(a, b):\n    return a + b\n"
+
+        loop = TDDLoop(sb, max_retries=2, coding_agent=agent)
+        result = loop.run(_spec(), CLEAN_CODE, "def test_add(): assert False")
+
+        assert result.success is True
+        assert result.attempts == 2
+        # The retry must have invoked the public revise_code entry point.
+        agent.revise_code.assert_called_once()
