@@ -292,3 +292,35 @@ class TestSkillVersionManager:
             ):
                 history = vm.get_history("empty")
             assert history == []
+
+
+# ---------------------------------------------------------------------------
+# SkillVersionManager — path traversal protection (B4)
+# ---------------------------------------------------------------------------
+
+
+class TestSkillVersionManagerTraversal:
+    def test_get_version_blocks_traversal(self):
+        """get_version must not resolve a name escaping the skills dir."""
+        with TemporaryDirectory() as d:
+            vm = SkillVersionManager(skills_dir=d)
+            # The naive join skills_dir/"../outside/evil.py" resolves to
+            # parent/outside/evil.py — which we plant here. Current code reads
+            # it and returns its VERSION comment; the fix must not.
+            outside = Path(d).parent / "outside" / "evil.py"
+            outside.parent.mkdir(parents=True, exist_ok=True)
+            outside.write_text("# VERSION: 9.9.9\ndef evil(): pass\n")
+            assert vm.get_version("../outside/evil") == "1.0.0"
+
+    def test_bump_version_blocks_traversal(self):
+        """bump_version must not write outside the skills dir."""
+        with TemporaryDirectory() as d:
+            outside = Path(d).parent / "outside" / "evil.py"
+            outside.parent.mkdir(parents=True, exist_ok=True)
+            outside.write_text("# VERSION: 1.0.0\noriginal\n")
+
+            vm = SkillVersionManager(skills_dir=d)
+            # Traversal targeting the outside file — must not modify it.
+            vm.bump_version("../outside/evil")
+            assert outside.read_text() == "# VERSION: 1.0.0\noriginal\n"
+            assert vm.get_version("../outside/evil") == "1.0.0"

@@ -290,4 +290,17 @@ class SkillVersionManager:
     # ------------------------------------------------------------------
 
     def _skill_path(self, skill_name: str) -> Path:
-        return self.skills_dir / f"{skill_name}.py"
+        """Resolve ``<skills_dir>/<skill_name>.py``, guarding against escapes.
+
+        Returns the resolved path if it stays inside ``skills_dir``, otherwise
+        a path that is guaranteed to never touch the filesystem (an
+        ``<unreachable>.py`` sentinel).  This makes path-traversal attempts
+        (e.g. ``../outside/evil``) harmless for both reads and writes.
+        """
+        base = self.skills_dir.resolve()
+        candidate = (base / f"{skill_name}.py").resolve()
+        try:
+            candidate.relative_to(base)
+        except ValueError:
+            return base / "<unreachable>.py"
+        return candidate
