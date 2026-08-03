@@ -123,6 +123,51 @@ class TestSafetyForbiddenImports:
 
 
 # ---------------------------------------------------------------------------
+# SafetyChecker — whitelist-based import allowlisting (B1)
+# ---------------------------------------------------------------------------
+
+
+class TestSafetyWhitelistImports:
+    def test_whitelist_allows_stdlib_math(self):
+        checker = SafetyChecker()
+        code = "import math\ndef f():\n    return math.sqrt(4)\n"
+        report = checker.check_code(code)
+        assert report.passed is True
+
+    def test_whitelist_allows_json(self):
+        checker = SafetyChecker()
+        report = checker.check_code("import json\n")
+        assert report.passed is True
+
+    def test_whitelist_blocks_socket(self):
+        checker = SafetyChecker()
+        code = "import socket\ns = socket.socket()\n"
+        report = checker.check_code(code)
+        assert report.passed is False
+        assert any("socket" in fi for fi in report.forbidden_imports)
+
+    def test_whitelist_blocks_urllib(self):
+        checker = SafetyChecker()
+        code = "import urllib.request\n"
+        report = checker.check_code(code)
+        assert report.passed is False
+        assert any("urllib" in fi for fi in report.forbidden_imports)
+
+    def test_whitelist_blocks_pathlib(self):
+        checker = SafetyChecker()
+        code = "import pathlib\n"
+        report = checker.check_code(code)
+        assert report.passed is False
+        assert any("pathlib" in fi for fi in report.forbidden_imports)
+
+    def test_whitelist_allows_relative_skill_import(self):
+        checker = SafetyChecker()
+        code = "from .math_skill import calculate_fibonacci\n"
+        report = checker.check_code(code)
+        assert report.passed is True
+
+
+# ---------------------------------------------------------------------------
 # SafetyChecker — check_skill_file
 # ---------------------------------------------------------------------------
 

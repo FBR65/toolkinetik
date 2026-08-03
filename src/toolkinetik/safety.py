@@ -61,6 +61,26 @@ class SafetyChecker:
         "subprocess.Popen",
     }
 
+    # Explicitly allowed standard-library modules. Any import whose top-level
+    # module is NOT in this set is flagged. Relative imports (`.module`) and
+    # imports of sibling skill modules in the skills directory are always
+    # allowed. This is a whitelist: unknown modules are rejected by default.
+    ALLOWED_STDLIB = {
+        "math",
+        "json",
+        "re",
+        "datetime",
+        "collections",
+        "itertools",
+        "functools",
+        "random",
+        "statistics",
+        "typing",
+        "enum",
+        "decimal",
+        "fractions",
+    }
+
     FORBIDDEN_IMPORTS = {"os", "subprocess", "shutil", "ctypes"}
 
     # ------------------------------------------------------------------
@@ -95,14 +115,25 @@ class SafetyChecker:
                     if root_name in self.FORBIDDEN_IMPORTS:
                         forbidden_imports.append(f"import {alias.name}")
                         issues.append(f"forbidden import: {alias.name}")
+                    elif root_name not in self.ALLOWED_STDLIB:
+                        forbidden_imports.append(f"import {alias.name}")
+                        issues.append(f"disallowed import: {alias.name}")
 
-            elif isinstance(node, ast.ImportFrom) and node.module:
-                root_name = node.module.split(".")[0]
+            elif isinstance(node, ast.ImportFrom):
+                # Relative imports (node.level > 0, e.g. `from .module import`)
+                # reference sibling skill modules and are always allowed.
+                if node.level > 0:
+                    continue
+                module = node.module or ""
+                root_name = module.split(".")[0]
                 if root_name in self.FORBIDDEN_IMPORTS:
                     # Report the full from-import module.
                     imported = node.module
                     forbidden_imports.append(f"from {imported} import ...")
                     issues.append(f"forbidden import: {imported}")
+                elif root_name not in self.ALLOWED_STDLIB:
+                    forbidden_imports.append(f"from {module} import ...")
+                    issues.append(f"disallowed import: {module}")
 
             # -- Check forbidden calls ----------------------------------
             if isinstance(node, ast.Call):
