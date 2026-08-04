@@ -20,7 +20,7 @@ from toolkinetik.config import get_settings
 console = Console()
 settings = get_settings()
 
-API_BASE = "http://localhost:8000"
+API_BASE = settings.TOOLKINETIK_API_URL
 HEADERS = {"X-API-Key": settings.AGNO_API_KEY}
 
 # --- Typer apps ------------------------------------------------------------
