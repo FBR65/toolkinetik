@@ -487,7 +487,7 @@ The tests MUST import the function from the implementation module.
         return f'''"""Stub implementation for {spec.name}."""
 
 
-def test_function():
+def {spec.name}():
     """Placeholder — real implementation should override this."""
     return None
 '''
@@ -495,11 +495,11 @@ def test_function():
     def _stub_tests(self, spec: SkillSpec) -> str:
         """Generate stub tests for testing."""
         return f'''"""Tests for {spec.name}."""
-from skill import test_function
+from skill import {spec.name}
 
 
 def test_basic():
-    assert test_function() is not None
+    assert {spec.name}() is not None
 '''
 
 
