@@ -215,7 +215,7 @@ class SkillWriter:
         prompt = self._build_tdd_prompt(spec)
         try:
             response = self._llm.chat.completions.create(
-                model="gpt-4o",
+                model=get_settings().OPENAI_MODEL,
                 messages=[
                     {"role": "system", "content": "You are a Python TDD expert. "
                      "Always write tests first, then implementation. "
@@ -419,7 +419,7 @@ class SkillWriter:
         """Ask LLM to classify request into skill spec."""
         try:
             response = self._llm.chat.completions.create(
-                model="gpt-4o",
+                model=get_settings().OPENAI_MODEL,
                 messages=[
                     {"role": "system", "content": "Extract a Python skill name, description, "
                      "signature, and test cases from this request. "
@@ -482,7 +482,7 @@ The tests MUST import the function from the implementation module.
             return None
         try:
             response = self._llm.chat.completions.create(
-                model="gpt-4o",
+                model=get_settings().OPENAI_MODEL,
                 messages=[
                     {"role": "system", "content": "You are a debugging expert. Fix the code."},
                     {"role": "user", "content": f"Fix this code:\n```python\n{code}\n```\nError:\n{error_trace}"},

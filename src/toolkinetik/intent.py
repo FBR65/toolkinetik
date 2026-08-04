@@ -104,8 +104,9 @@ class IntentEngine:
         if self._llm is None:
             return {"intent": "chat"}
         prompt = self._build_prompt(user_request, tool_names)
+        from toolkinetik.config import get_settings
         response = self._llm.chat.completions.create(
-            model="gpt-4o",
+            model=get_settings().OPENAI_MODEL,
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"},
         )
