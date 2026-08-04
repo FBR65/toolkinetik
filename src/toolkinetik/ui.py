@@ -25,6 +25,71 @@ HEADERS = {"X-API-Key": settings.AGNO_API_KEY}
 THEME_PRIMARY = "#0284c7"
 THEME_DARK = "#0f172a"
 
+# --- Status indicators (module-level, reactive via NiceGUI) ------------------
+# These are updated by send_message and the WebSocket handler to reflect
+# the current agent state in the UI.
+_agent_status: str = "Bereit"
+_rag_status: str = "Aus"
+
+# Phase-specific status messages
+_PHASE_STATUS = {
+    "chat": "Bereit",
+    "execute_skill": "Führe Skill aus...",
+    "create_skill": "Erstelle neuen Skill...",
+    "rag_search": "Durchsuche Dokumente...",
+    "research": "Suche auf PyPi/GitHub...",
+    "generate": "Generiere Code...",
+    "tdd": "Teste im Docker-Sandbox...",
+    "promote": "Registriere Skill...",
+}
+_RAG_PHASE_STATUS = {
+    "chat": "Aus",
+    "rag_search": "Aktiv",
+    "research": "Lade Embeddings...",
+}
+
+
+def _agent_status_label() -> str:
+    """Return the current agent status text for the UI."""
+    return f"Agent: {_agent_status}"
+
+
+def _rag_status_label() -> str:
+    """Return the current RAG status text for the UI."""
+    return f"RAG: {_rag_status}"
+
+
+def set_agent_status(status: str) -> None:
+    """Update the agent status for the frontend display.
+
+    Called by WebSocket handler when receiving phase updates.
+    """
+    global _agent_status
+    _agent_status = status
+
+
+def set_rag_status(status: str) -> None:
+    """Update the RAG status for the frontend display."""
+    global _rag_status
+    _rag_status = status
+
+
+def set_intent_phase(phase: str) -> None:
+    """Update UI status based on the current intent phase.
+
+    Maps phase names to human-readable status strings.
+    """
+    global _agent_status, _rag_status
+    _agent_status = _PHASE_STATUS.get(phase, "Verarbeite...")
+    _rag_status = _RAG_PHASE_STATUS.get(phase, _rag_status)
+
+
+def reset_status() -> None:
+    """Reset all status indicators to defaults."""
+    global _agent_status, _rag_status
+    _agent_status = "Bereit"
+    _rag_status = "Aus"
+
 
 # --- Page setup function (defined but not registered until run) ------------
 
@@ -69,6 +134,8 @@ def main_page() -> None:
         with ui.column().classes("col-span-4").props('role="complementary"'):
             ui.label("Skill Monitor").classes("text-lg font-bold")
             ui.label("Status: Aktiv").props('aria-label="System Status"')
+            ui.label(_rag_status_label())
+            ui.label(_agent_status_label()).props('aria-label="Agent Status"')
             ui.label(f"Docker: configured (image: {settings.SANDBOX_IMAGE})").props(
                 'aria-label="Sandbox Status"'
             )
@@ -101,7 +168,12 @@ async def reload_skills() -> None:
 
 
 async def send_message(chat_input, chat_container) -> None:
-    """Send a chat message via WebSocket and display the response."""
+    """Send a chat message via WebSocket and display the response.
+
+    Handles two message types from the server:
+      - {"type": "response", "content": "..."}  — normal chat reply
+      - {"type": "status", "phase": "...", "message": "..."}  — agent phase update
+    """
     import json
 
     import websockets
@@ -111,18 +183,44 @@ async def send_message(chat_input, chat_container) -> None:
     if not text:
         return
     chat_input.value = ""
+    set_intent_phase("chat")
     try:
         with chat_container:
             ui.chat_message(text, name="User", sent=True)
         async with websockets.connect(WS_URL) as ws:
             await ws.send(text)
-            response = await ws.recv()
-            data = json.loads(response)
-            content = data.get("content", str(data)) if isinstance(data, dict) else str(data)
-            with chat_container:
-                ui.chat_message(content, name="ToolKinetik", avatar="robot", sent=False)
+            while True:
+                response = await ws.recv()
+                data = json.loads(response)
+                if isinstance(data, dict):
+                    msg_type = data.get("type", "response")
+                    if msg_type == "status":
+                        phase = data.get("phase", "")
+                        message = data.get("message", "")
+                        set_intent_phase(phase)
+                        if message:
+                            set_agent_status(message)
+                    elif msg_type == "response":
+                        content = data.get("content", str(data))
+                        with chat_container:
+                            ui.chat_message(content, name="ToolKinetik", avatar="robot", sent=False)
+                        reset_status()
+                        break
+                    elif msg_type == "error":
+                        content = data.get("content", "Unknown error")
+                        with chat_container:
+                            ui.chat_message(content, name="Error", avatar="warning", sent=False)
+                        reset_status()
+                        break
+                else:
+                    content = str(data)
+                    with chat_container:
+                        ui.chat_message(content, name="ToolKinetik", avatar="robot", sent=False)
+                    reset_status()
+                    break
     except Exception as exc:
         ui.notify(f"Chat error: {exc}", color="negative")
+        reset_status()
 
 
 def run() -> None:

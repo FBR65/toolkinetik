@@ -9,7 +9,10 @@ close the create-test-promote loop autonomously.
 
 from __future__ import annotations
 
+import json
 import re
+from dataclasses import dataclass, field
+from typing import Any
 
 from toolkinetik.coding_agent import CodingAgent, CodingResult, SkillSpec
 from toolkinetik.promotion import SkillPromoter
@@ -18,7 +21,119 @@ from toolkinetik.sandbox import SandboxRunner
 from toolkinetik.tdd_loop import TDDLoop
 
 # ---------------------------------------------------------------------------
-# IntentDetector
+# IntentEngine (LLM-driven)
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class SkillMatch:
+    """Result of IntentEngine.analyze."""
+
+    action: str  # "execute_skill" | "create_skill" | "rag_search" | "chat"
+    skill_name: str = ""
+    skill_spec: SkillSpec | None = None
+    query: str = ""
+    tool_names: list[str] = field(default_factory=list)
+
+
+class IntentEngine:
+    """LLM-driven intent detector.
+
+    Unlike IntentDetector (keyword-based), this engine asks an LLM to classify
+    a user request into one of four intents:
+    - execute_skill: an existing skill can handle the request
+    - create_skill:  a new skill must be generated (TDD loop)
+    - rag_search:    the request needs document search (RAG)
+    - chat:          normal conversation, no skill needed
+    """
+
+    def __init__(self, registry: DynamicToolRegistry | None = None, llm: Any = None) -> None:
+        self.registry = registry
+        self._llm = llm
+
+    def available_tools(self) -> list[str]:
+        """Return names of currently loaded skills."""
+        names: list[str] = []
+        if self.registry is None:
+            return names
+        try:
+            tools = self.registry.get_tools()
+            names = [getattr(t, "__name__", str(t)) for t in tools]
+        except Exception:
+            names = []
+        return names
+
+    def analyze(self, user_request: str) -> SkillMatch:
+        """Classify *user_request* and return a :class:`SkillMatch`."""
+        tool_names = self.available_tools()
+        intent_data = self._ask_llm(user_request, tool_names)
+        intent = intent_data.get("intent", "chat")
+
+        if intent == "execute_skill":
+            return SkillMatch(
+                action="execute_skill",
+                skill_name=intent_data.get("skill_name", ""),
+                tool_names=tool_names,
+            )
+        if intent == "create_skill":
+            spec = SkillSpec(
+                name=intent_data.get("skill_name", ""),
+                description=intent_data.get("description", ""),
+                signature=intent_data.get("signature", ""),
+                test_cases=[],
+            )
+            return SkillMatch(
+                action="create_skill",
+                skill_spec=spec,
+                tool_names=tool_names,
+            )
+        if intent == "rag_search":
+            return SkillMatch(
+                action="rag_search",
+                query=intent_data.get("query", ""),
+                tool_names=tool_names,
+            )
+        return SkillMatch(action="chat", tool_names=tool_names)
+
+    def _ask_llm(self, user_request: str, tool_names: list[str]) -> dict[str, Any]:
+        """Call the LLM to classify the request.
+
+        In production this sends the request + tool list to the OpenAI-compatible
+        LLM endpoint and parses the JSON response.  In tests this is patched.
+        """
+        if self._llm is None:
+            return {"intent": "chat"}
+        prompt = self._build_prompt(user_request, tool_names)
+        response = self._llm.chat.completions.create(
+            model="gpt-4o",
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"},
+        )
+        return json.loads(response.choices[0].message.content)
+
+    def _build_prompt(self, user_request: str, tool_names: list[str]) -> str:
+        """Build the LLM classification prompt."""
+        tools_str = "\n".join(f"  - {t}" for t in tool_names) or "  (none)"
+        return f"""
+You are an intent classifier for a self-extending agent system called ToolKinetik.
+
+Available tools/skills:
+{tools_str}
+
+Classify the following user request into EXACTLY ONE of these intents:
+- "execute_skill": An existing tool can fulfill this request. Return the exact tool name in 'skill_name'.
+- "create_skill": No existing tool can handle this. Return 'skill_name', 'description', and 'signature' for a new Python function.
+- "rag_search": The user wants to search documents/documents/files. Return the search query in 'query'.
+- "chat": Normal conversation, no skill needed.
+
+User request: "{user_request}"
+
+Output ONLY valid JSON:
+"""
+
+
+# ---------------------------------------------------------------------------
+# IntentDetector (legacy — keyword-based, kept for backward compatibility)
 # ---------------------------------------------------------------------------
 
 

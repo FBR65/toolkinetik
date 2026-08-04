@@ -16,7 +16,10 @@ from fastapi import Depends, FastAPI, Security, WebSocket, WebSocketDisconnect
 from fastapi.security import APIKeyHeader
 
 from toolkinetik.config import get_settings
+from toolkinetik.intent import IntentEngine
+from toolkinetik.rag_manager import RagManager
 from toolkinetik.registry import DynamicToolRegistry
+from toolkinetik.skill_writer import SkillWriter
 
 # --- Settings & registry --------------------------------------------------
 settings = get_settings()
@@ -43,19 +46,58 @@ def _tool_names() -> list[str]:
     return [t.__name__ for t in registry.registered_tools.values()]
 
 
+# --- Integrated components (lazy singletons) ---------------------------------
+
+_intent_engine: IntentEngine | None = None
+_skill_writer: SkillWriter | None = None
+_rag_manager: RagManager | None = None
+
+
+def get_intent_engine() -> IntentEngine:
+    """Return the singleton IntentEngine, initializing lazily."""
+    global _intent_engine
+    if _intent_engine is None:
+        _intent_engine = IntentEngine(registry=registry)
+    return _intent_engine
+
+
+def _get_intent_engine() -> IntentEngine:
+    """Internal accessor (same as get_intent_engine)."""
+    return get_intent_engine()
+
+
+def get_skill_writer() -> SkillWriter:
+    """Return the singleton SkillWriter."""
+    global _skill_writer
+    if _skill_writer is None:
+        _skill_writer = SkillWriter()
+    return _skill_writer
+
+
+def get_rag_manager() -> RagManager:
+    """Return the singleton RagManager."""
+    global _rag_manager
+    if _rag_manager is None:
+        _rag_manager = RagManager()
+    return _rag_manager
+
+
 def create_agent():  # pragma: no cover — lazy import, needs LLM backend
-    """Create an Agno Agent lazily (avoids importing agno.agent at module level).
+    """Create an Agno Agent with IntentEngine + SkillWriter wired in.
 
-    Importing ``agno.agent.Agent`` at module level would require a configured
-    LLM backend even for simple health/skill requests, so we defer it here.
-
-    Agno >= 2.x configures the LLM endpoint via an ``OpenAIChat`` model, not
-    via ``Agent(api_key=..., base_url=...)``.
+    The agent gets:
+      - All tools from the DynamicToolRegistry (existing skills)
+      - The SkillWriter as a tool for autonomous skill creation
+    Intent classification is handled separately via get_intent_engine().
     """
     from agno.agent import Agent
     from agno.models.openai import OpenAIChat
 
     tools = registry.get_tools()
+    skill_writer = get_skill_writer()
+    # Register the skill_writer.write_skill as a callable tool
+    tools.append(skill_writer.write_skill)
+
     model = OpenAIChat(
         id=settings.OPENAI_MODEL,
         api_key=settings.OPENAI_API_KEY or None,

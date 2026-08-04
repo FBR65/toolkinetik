@@ -130,6 +130,9 @@ def test_create_agent_uses_openaichat_model() -> None:
     Regression test: Agent(api_key=..., base_url=...) is no longer valid in
     agno 2.x and raised a TypeError; the endpoint config now lives on the
     model instance.
+
+    The agent now also includes the SkillWriter's write_skill tool for
+    autonomous skill creation — this is an expected integration change.
     """
     from toolkinetik.app import create_agent
     from toolkinetik.config import get_settings
@@ -143,4 +146,7 @@ def test_create_agent_uses_openaichat_model() -> None:
     assert agent.model.api_key == (settings.OPENAI_API_KEY or None)
     assert agent.tools
     expected = {t.__name__ for t in DynamicToolRegistry(settings.SKILLS_DIR).get_tools()}
-    assert {t.__name__ for t in agent.tools} == expected
+    agent_tool_names = {t.__name__ for t in agent.tools}
+    # The agent includes all registry tools + write_skill (from SkillWriter)
+    assert expected.issubset(agent_tool_names)
+    assert "write_skill" in agent_tool_names
