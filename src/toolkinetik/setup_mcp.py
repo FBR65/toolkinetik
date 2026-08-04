@@ -17,10 +17,13 @@ results — the agent can still operate, just without wigolo research data.
 from __future__ import annotations
 
 import json
+import logging
 import shutil
 import subprocess
 import time
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 class _StubClient:
@@ -118,6 +121,7 @@ class WigoloMCPToolkit:
         try:
             return self._client.research(query=query, context=context)
         except Exception:
+            logger.exception("wigolo research failed; falling back to stub")
             self._use_stub = True
             stub = getattr(self._client, "_stub", _StubClient())
             return stub.research(query, context)
@@ -133,6 +137,7 @@ class WigoloMCPToolkit:
         try:
             return self._client.extract(url=url)
         except Exception:
+            logger.exception("wigolo extract failed; falling back to stub")
             self._use_stub = True
             stub = getattr(self._client, "_stub", _StubClient())
             return stub.extract(url)

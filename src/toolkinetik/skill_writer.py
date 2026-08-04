@@ -7,6 +7,7 @@ AST-based SafetyChecker for security validation, and DynamicToolRegistry for hot
 from __future__ import annotations
 
 import json
+import logging
 import re
 import subprocess
 from dataclasses import dataclass, field
@@ -19,6 +20,8 @@ from toolkinetik.db import SkillStore
 from toolkinetik.promotion import safe_skill_path
 from toolkinetik.registry import DynamicToolRegistry
 from toolkinetik.safety import SafetyChecker, SafetyReport
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -201,6 +204,7 @@ class SkillWriter:
                 result_str = str(result)
             return result_str
         except Exception:
+            logger.exception("wigolo research failed for skill %r", spec.name)
             return ""
 
     # ------------------------------------------------------------------
@@ -228,7 +232,7 @@ class SkillWriter:
             if code and tests:
                 return code, tests
         except Exception:
-            pass
+            logger.exception("LLM code generation failed for skill %r", spec.name)
 
         return self._stub_code(spec), self._stub_tests(spec)
 
@@ -400,6 +404,7 @@ class SkillWriter:
             )
             return proc.returncode == 0
         except Exception:
+            logger.exception("git commit failed for skill %s", skill_path.stem)
             return False
 
     # ------------------------------------------------------------------
@@ -430,6 +435,7 @@ class SkillWriter:
             )
             return json.loads(response.choices[0].message.content)
         except Exception:
+            logger.exception("LLM classify failed for request %r", user_request)
             return {}
 
     def _heuristic_spec(self, user_request: str) -> dict[str, Any]:
@@ -492,6 +498,7 @@ The tests MUST import the function from the implementation module.
             blocks = re.findall(r"```python\n(.*?)```", content, re.DOTALL)
             return blocks[0].strip() if blocks else content.strip()
         except Exception:
+            logger.exception("LLM revise_code failed")
             return None
 
     def _stub_code(self, spec: SkillSpec) -> str:

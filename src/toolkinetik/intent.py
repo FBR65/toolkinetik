@@ -10,6 +10,7 @@ close the create-test-promote loop autonomously.
 from __future__ import annotations
 
 import json
+import logging
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -19,6 +20,8 @@ from toolkinetik.promotion import SkillPromoter
 from toolkinetik.registry import DynamicToolRegistry
 from toolkinetik.sandbox import SandboxRunner
 from toolkinetik.tdd_loop import TDDLoop
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # IntentEngine (LLM-driven)

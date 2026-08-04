@@ -9,6 +9,7 @@ daemon is required for the test suite.
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import tempfile
@@ -17,6 +18,8 @@ from pathlib import Path
 import docker
 
 from toolkinetik.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 class SandboxRunner:

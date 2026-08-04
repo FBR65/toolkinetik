@@ -8,6 +8,7 @@ file, marks the DB row as deleted, and re-triggers hot-reload.
 
 from __future__ import annotations
 
+import logging
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +16,8 @@ from pathlib import Path
 from toolkinetik.config import get_settings
 from toolkinetik.db import SkillStore
 from toolkinetik.registry import DynamicToolRegistry
+
+logger = logging.getLogger(__name__)
 
 
 def safe_skill_path(skills_dir: str, skill_name: str) -> Path | None:
@@ -136,7 +139,7 @@ class SkillPromoter:
             self.db.delete_skill(skill_name)
         except Exception:
             # DB may not have the row; don't fail rollback for that.
-            pass
+            logger.exception("rollback: db.delete_skill failed for %r", skill_name)
 
         try:
             self.registry.get_tools()
