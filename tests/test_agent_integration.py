@@ -19,8 +19,8 @@ def test_app_has_create_agent_integrated() -> None:
     # Agent must have tools (from registry + SkillWriter + IntentEngine)
     assert agent.tools is not None
     # IntentEngine must be initialized
-    from toolkinetik.app import _get_intent_engine
-    engine = _get_intent_engine()
+    from toolkinetik.app import get_intent_engine
+    engine = get_intent_engine()
     assert engine is not None
 
 

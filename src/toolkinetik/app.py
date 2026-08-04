@@ -61,11 +61,6 @@ def get_intent_engine() -> IntentEngine:
     return _intent_engine
 
 
-def _get_intent_engine() -> IntentEngine:
-    """Internal accessor (same as get_intent_engine)."""
-    return get_intent_engine()
-
-
 def get_skill_writer() -> SkillWriter:
     """Return the singleton SkillWriter."""
     global _skill_writer

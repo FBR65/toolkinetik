@@ -269,7 +269,7 @@ class SkillWriter:
 
             if attempt < self._max_retries and self._llm is not None:
                 # Retry with revised code
-                revised = self._revise_code(code, stderr + stdin_to_error(stdout), spec_name=code)
+                revised = self._revise_code(code, stderr + "\n" + stdout, spec_name=code)
                 if revised:
                     code = revised
 
@@ -501,8 +501,3 @@ from skill import {spec.name}
 def test_basic():
     assert {spec.name}() is not None
 '''
-
-
-def stdin_to_error(stdout: str) -> str:
-    """Extract error output from stdout for retry prompts."""
-    return stdout
