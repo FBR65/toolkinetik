@@ -801,6 +801,12 @@ Scenario: time.sleep(1.0) durch Polling ersetzt
   When nach "time.sleep" gesucht
   Then kein Match in der _ensure_running-Methode (anderswo ok)
 
+**SPEC-Revision 2026-08-04:** Die obige Assertion wurde angepasst auf
+"kein `sleep(1.0)`" — kurze Poll-Intervalle (`time.sleep(0.05)` im
+Read-Loop) sind zulässig, da echtes Polling ohne kurzem Sleep CPU-Loop
+erzeugt. Die Szenarien "Handshake", "Framing", "Notification-Skip" bleiben
+unverändert.
+
 Scenario: Stub-Fallback bei Start-Fehler (Regression)
   Given uvx fehlt
   When WigoloMCPToolkit.research("...")
