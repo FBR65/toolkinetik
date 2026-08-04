@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import secrets
+import threading
 
 from fastapi import Depends, FastAPI, Security, WebSocket, WebSocketDisconnect
 from fastapi.security import APIKeyHeader
@@ -52,44 +53,54 @@ _intent_engine: IntentEngine | None = None
 _skill_writer: SkillWriter | None = None
 _rag_manager: RagManager | None = None
 _agent: object | None = None
+_singleton_lock = threading.Lock()
 
 
 def get_intent_engine() -> IntentEngine:
-    """Return the singleton IntentEngine, initializing lazily."""
+    """Return the singleton IntentEngine, initializing lazily (thread-safe)."""
     global _intent_engine
     if _intent_engine is None:
-        _intent_engine = IntentEngine(registry=registry)
+        with _singleton_lock:
+            if _intent_engine is None:
+                _intent_engine = IntentEngine(registry=registry)
     return _intent_engine
 
 
 def get_skill_writer() -> SkillWriter:
-    """Return the singleton SkillWriter."""
+    """Return the singleton SkillWriter (thread-safe)."""
     global _skill_writer
     if _skill_writer is None:
-        _skill_writer = SkillWriter()
+        with _singleton_lock:
+            if _skill_writer is None:
+                _skill_writer = SkillWriter()
     return _skill_writer
 
 
 def get_rag_manager() -> RagManager:
-    """Return the singleton RagManager."""
+    """Return the singleton RagManager (thread-safe)."""
     global _rag_manager
     if _rag_manager is None:
-        _rag_manager = RagManager()
+        with _singleton_lock:
+            if _rag_manager is None:
+                _rag_manager = RagManager()
     return _rag_manager
 
 
 def get_agent():
-    """Return the cached Agno Agent, creating it lazily on first use."""
+    """Return the cached Agno Agent, creating it lazily on first use (thread-safe)."""
     global _agent
     if _agent is None:
-        _agent = create_agent()
+        with _singleton_lock:
+            if _agent is None:
+                _agent = create_agent()
     return _agent
 
 
 def invalidate_agent_cache() -> None:
     """Drop the cached Agent so the next get_agent() rebuilds it (after reload)."""
     global _agent
-    _agent = None
+    with _singleton_lock:
+        _agent = None
 
 
 def create_agent():  # pragma: no cover — lazy import, needs LLM backend
