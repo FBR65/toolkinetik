@@ -17,6 +17,21 @@ from toolkinetik.db import SkillStore
 from toolkinetik.registry import DynamicToolRegistry
 
 
+def safe_skill_path(skills_dir: str, skill_name: str) -> Path | None:
+    """Resolve ``<skills_dir>/<skill_name>.py`` and guard against path traversal.
+
+    Returns the resolved path if it stays inside *skills_dir*, otherwise ``None``.
+    Handles ``..`` segments and absolute paths.
+    """
+    base = Path(skills_dir).resolve()
+    candidate = (base / f"{skill_name}.py").resolve()
+    try:
+        candidate.relative_to(base)
+    except ValueError:
+        return None
+    return candidate
+
+
 @dataclass
 class PromotionResult:
     """Outcome of a promotion attempt."""
@@ -55,7 +70,12 @@ class SkillPromoter:
         metadata: dict | None = None,
     ) -> PromotionResult:
         """Write *code* to ``<skills_dir>/<skill_name>.py`` and register it."""
-        skill_path = Path(self.skills_dir) / f"{skill_name}.py"
+        skill_path = safe_skill_path(self.skills_dir, skill_name)
+        if skill_path is None:
+            return PromotionResult(
+                success=False,
+                error=f"path traversal detected in skill name: {skill_name!r}",
+            )
         try:
             skill_path.write_text(code)
         except OSError as exc:
@@ -103,7 +123,9 @@ class SkillPromoter:
 
     def rollback(self, skill_name: str) -> bool:
         """Remove the skill file, mark DB row deleted, and hot-reload."""
-        skill_path = Path(self.skills_dir) / f"{skill_name}.py"
+        skill_path = safe_skill_path(self.skills_dir, skill_name)
+        if skill_path is None:
+            return False
         try:
             if skill_path.exists():
                 skill_path.unlink()

@@ -16,6 +16,7 @@ from typing import Any
 from toolkinetik.coding_agent import SkillSpec
 from toolkinetik.config import get_settings
 from toolkinetik.db import SkillStore
+from toolkinetik.promotion import safe_skill_path
 from toolkinetik.registry import DynamicToolRegistry
 from toolkinetik.safety import SafetyChecker, SafetyReport
 
@@ -319,7 +320,12 @@ class SkillWriter:
         commit: bool = True,
     ) -> PromoteResult:
         """Write the skill file, hot-reload, register in DB, git-commit."""
-        skill_path = Path(self._skills_dir) / f"{skill_name}.py"
+        skill_path = safe_skill_path(self._skills_dir, skill_name)
+        if skill_path is None:
+            return PromoteResult(
+                success=False,
+                error=f"path traversal detected in skill name: {skill_name!r}",
+            )
         try:
             skill_path.write_text(code)
         except OSError as exc:
