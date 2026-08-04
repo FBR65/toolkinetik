@@ -77,6 +77,11 @@ class IntentEngine:
         intent_data = self._ask_llm(user_request, tool_names)
         intent = intent_data.get("intent", "chat")
 
+        valid_intents = {"execute_skill", "create_skill", "rag_search", "chat"}
+        if intent not in valid_intents:
+            logger.warning("LLM returned unknown intent %r; degrading to chat", intent)
+            intent = "chat"
+
         if intent == "execute_skill":
             return SkillMatch(
                 action="execute_skill",
