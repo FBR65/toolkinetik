@@ -239,6 +239,13 @@ Scenario: Revidierter Code wird erneut safety-gecheckt
   Then die Rückgabe hat success=False
   And "safety" in error.lower() ODER safety_issues ist nicht leer
 
+**SPEC-Revision 2026-08-04 (im Rahmen von #8):** Mit #8 delegiert
+`SkillWriter._run_tdd` an `TDDLoop.run`, das die finale Code-Version
+security-checkt. Der Safety-Check des revidierten Codes passiert damit
+in `TDDLoop._security_check`, nicht mehr in `SkillWriter._safety_check`.
+Der Test prüft jetzt das End-Resultat (`success=False` bei forbidden
+import im revidierten Code) statt des `_safety_check`-Aufrufs.
+
 Scenario: stdin_to_error-Funktion ist entfernt
   Given die Quelle von skill_writer.py
   When nach "stdin_to_error" gesucht wird

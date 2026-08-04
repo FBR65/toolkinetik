@@ -57,8 +57,11 @@ class TestReviseCodeCalledCorrectly:
         assert "ImportError" in call_args.args[1] or "ImportError" in str(call_args.args[1])
 
     def test_revised_code_safety_checked(self, tmp_path):
+        """After #8, _run_tdd delegates to TDDLoop, which safety-checks the
+        final code via its own SafetyChecker. We verify TDDLoop's security
+        check runs on the revised (final) code."""
         writer = _make_writer(tmp_path)
-        # sandbox fails first, then succeeds
+        # sandbox fails first, then succeeds with the revised code
         writer._sandbox.run_tests.side_effect = [
             {"exit_code": 1, "stdout": "fail", "stderr": "err"},
             {"exit_code": 0, "stdout": "ok", "stderr": ""},
@@ -67,11 +70,8 @@ class TestReviseCodeCalledCorrectly:
         writer._llm.chat.completions.create.return_value.choices = [
             MagicMock(message=MagicMock(content="```python\nimport os\ndef bad(): pass\n```"))
         ]
-        with patch.object(writer, "_safety_check", wraps=writer._safety_check) as spy_safety:
-            result = writer._run_tdd("original", "tests")
-        # The revised code was safety-checked
-        assert spy_safety.called
-        # Result must be failure because safety check failed on revised code
+        result = writer._run_tdd("original", "tests")
+        # Result must be failure because the final (revised) code fails safety
         assert result.success is False
 
 

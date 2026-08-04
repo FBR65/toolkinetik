@@ -6,7 +6,8 @@ from unittest.mock import MagicMock, patch
 
 from toolkinetik.coding_agent import SkillSpec
 from toolkinetik.safety import SafetyReport
-from toolkinetik.skill_writer import SkillWriter, SkillWriterResult, TDDResult
+from toolkinetik.skill_writer import SkillWriter, SkillWriterResult
+from toolkinetik.tdd_loop import TDDResult
 
 
 class TestSkillSpecGeneration:
@@ -118,7 +119,7 @@ class TestFullFlow:
         writer = SkillWriter(wigolo=MagicMock(), llm=MagicMock())
         with patch.object(writer, "_research_dependencies"), \
              patch.object(writer, "_generate_code", return_value=("def foo(): return 1", "def test_foo(): pass")), \
-             patch.object(writer, "_run_tdd", return_value=TDDResult(success=True, exit_code=0, stdout="passed", stderr="", attempts=1)), \
+             patch.object(writer, "_run_tdd", return_value=TDDResult(success=True, exit_code=0, stdout="passed", stderr="", security_passed=True, attempts=1)), \
              patch.object(writer, "_safety_check") as mock_safety, \
              patch.object(writer, "_promote") as mock_promote:
             mock_safety.return_value = SafetyReport(passed=True)
