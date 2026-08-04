@@ -95,13 +95,13 @@ def test_call_cli_timeout_raises():
         agent._call_cli("do something", "claude")
 
 
-def test_call_cli_nonzero_return_returns_stderr():
-    """_call_cli returns stderr when the CLI exits non-zero."""
+def test_call_cli_nonzero_return_raises():
+    """_call_cli raises RuntimeError when the CLI exits non-zero (#5)."""
     agent = CodingAgent(cli_primary="claude")
     mock = MagicMock(returncode=1, stdout="", stderr="compile error")
-    with patch("toolkinetik.coding_agent.subprocess.run", return_value=mock):
-        output = agent._call_cli("do something", "claude")
-    assert output == "compile error"
+    with patch("toolkinetik.coding_agent.subprocess.run", return_value=mock), \
+         pytest.raises(RuntimeError, match="compile error"):
+        agent._call_cli("do something", "claude")
 
 
 def test_call_cli_aider_passes_agents_md():
@@ -180,13 +180,17 @@ def test_create_skill_all_clis_fail():
 
 
 def test_create_skill_empty_primary_output_falls_back():
-    """Empty output from the primary CLI must fall back to the next CLI."""
+    """Empty output from the primary CLI must fall back to the next CLI (#5: via ValueError)."""
     spec = SkillSpec(name="x", description="d", signature="f() -> None")
     agent = CodingAgent(cli_primary="claude", cli_fallbacks=["codex"])
     with patch.object(
         agent,
         "_call_cli",
-        side_effect=["", "def f() -> None:\n    return None\n", "def test_f(): pass\n"],
+        side_effect=[
+            ValueError("empty"),
+            "def f() -> None:\n    return None\n",
+            "def test_f(): pass\n",
+        ],
     ):
         result = agent.create_skill(spec)
     assert result.success is True

@@ -377,7 +377,12 @@ class CodingAgent:
             timeout=timeout,
         )
         if proc.returncode != 0:
-            return proc.stderr or proc.stdout or ""
+            raise RuntimeError(
+                f"CLI '{cli_name}' exited with code {proc.returncode}: "
+                f"{proc.stderr or proc.stdout or '<no output>'}"
+            )
+        if not proc.stdout.strip():
+            raise ValueError(f"CLI '{cli_name}' produced empty output")
         return proc.stdout
 
     @staticmethod
