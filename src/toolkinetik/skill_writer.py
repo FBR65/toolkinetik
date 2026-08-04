@@ -220,6 +220,7 @@ class SkillWriter:
         try:
             response = self._llm.chat.completions.create(
                 model=get_settings().OPENAI_MODEL,
+                timeout=get_settings().LLM_TIMEOUT,
                 messages=[
                     {"role": "system", "content": "You are a Python TDD expert. "
                      "Always write tests first, then implementation. "
@@ -425,6 +426,7 @@ class SkillWriter:
         try:
             response = self._llm.chat.completions.create(
                 model=get_settings().OPENAI_MODEL,
+                timeout=get_settings().LLM_TIMEOUT,
                 messages=[
                     {"role": "system", "content": "Extract a Python skill name, description, "
                      "signature, and test cases from this request. "
@@ -489,6 +491,7 @@ The tests MUST import the function from the implementation module.
         try:
             response = self._llm.chat.completions.create(
                 model=get_settings().OPENAI_MODEL,
+                timeout=get_settings().LLM_TIMEOUT,
                 messages=[
                     {"role": "system", "content": "You are a debugging expert. Fix the code."},
                     {"role": "user", "content": f"Fix this code:\n```python\n{code}\n```\nError:\n{error_trace}"},

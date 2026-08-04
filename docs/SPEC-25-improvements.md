@@ -1139,7 +1139,7 @@ Scenario: SkillWriter._revise_code hat Timeout
   Then Rückgabe == None, Dauer < 3s
 
 Scenario: Timeout via ENV konfigurierbar
-  Given ENV TOOLKINETIK_LLM_TIMEOUT=30
+  Given ENV LLM_TIMEOUT=30
   When Settings geladen
   Then settings.LLM_TIMEOUT == 30
   And dieser Wert wird an LLM-Aufrufe übergeben

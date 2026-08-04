@@ -67,6 +67,7 @@ class Settings(BaseSettings):
 
     # ToolKinetik settings
     AGNO_API_KEY: str = ""
+    LLM_TIMEOUT: int = 60
 
     # Sandbox settings
     SANDBOX_IMAGE: str = "python:3.12-slim"

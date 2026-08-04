@@ -113,12 +113,17 @@ class IntentEngine:
             return {"intent": "chat"}
         prompt = self._build_prompt(user_request, tool_names)
         from toolkinetik.config import get_settings
-        response = self._llm.chat.completions.create(
-            model=get_settings().OPENAI_MODEL,
-            messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"},
-        )
-        return json.loads(response.choices[0].message.content)
+        try:
+            response = self._llm.chat.completions.create(
+                model=get_settings().OPENAI_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                response_format={"type": "json_object"},
+                timeout=get_settings().LLM_TIMEOUT,
+            )
+            return json.loads(response.choices[0].message.content)
+        except Exception:
+            logger.exception("LLM classify failed; degrading to chat intent")
+            return {"intent": "chat"}
 
     def _build_prompt(self, user_request: str, tool_names: list[str]) -> str:
         """Build the LLM classification prompt."""
