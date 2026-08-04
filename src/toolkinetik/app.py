@@ -51,6 +51,7 @@ def _tool_names() -> list[str]:
 _intent_engine: IntentEngine | None = None
 _skill_writer: SkillWriter | None = None
 _rag_manager: RagManager | None = None
+_agent: object | None = None
 
 
 def get_intent_engine() -> IntentEngine:
@@ -75,6 +76,20 @@ def get_rag_manager() -> RagManager:
     if _rag_manager is None:
         _rag_manager = RagManager()
     return _rag_manager
+
+
+def get_agent():
+    """Return the cached Agno Agent, creating it lazily on first use."""
+    global _agent
+    if _agent is None:
+        _agent = create_agent()
+    return _agent
+
+
+def invalidate_agent_cache() -> None:
+    """Drop the cached Agent so the next get_agent() rebuilds it (after reload)."""
+    global _agent
+    _agent = None
 
 
 def create_agent():  # pragma: no cover — lazy import, needs LLM backend
@@ -113,6 +128,7 @@ async def health() -> dict:
 async def reload_skills() -> dict:
     """Hot-reload skills from the skills directory."""
     registry.get_tools()
+    invalidate_agent_cache()
     return {"status": "success", "loaded_tools": _tool_names()}
 
 
@@ -137,9 +153,9 @@ async def ws_chat(websocket: WebSocket) -> None:
     try:
         while True:
             data = await websocket.receive_text()
-            # Create agent lazily and stream response
+            # Use cached agent; cache is invalidated on reload-skills.
             try:
-                agent = create_agent()
+                agent = get_agent()
                 response = agent.run(data)
                 content = response.content if hasattr(response, "content") else str(response)
                 await websocket.send_text(json.dumps({"type": "response", "content": content}))
