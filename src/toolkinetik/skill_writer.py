@@ -28,6 +28,7 @@ class TDDResult:
     stdout: str
     stderr: str
     attempts: int = 0
+    error: str = ""
 
 
 @dataclass
@@ -269,8 +270,19 @@ class SkillWriter:
 
             if attempt < self._max_retries and self._llm is not None:
                 # Retry with revised code
-                revised = self._revise_code(code, stderr + "\n" + stdout, spec_name=code)
+                revised = self._revise_code(code, stderr + "\n" + stdout)
                 if revised:
+                    # Safety-check the revised code before retrying.
+                    safety = self._safety_check(revised)
+                    if not safety.passed:
+                        return TDDResult(
+                            success=False,
+                            exit_code=exit_code,
+                            stdout=stdout,
+                            stderr=stderr,
+                            attempts=attempts,
+                            error="revised code failed safety: " + "; ".join(safety.issues),
+                        )
                     code = revised
 
         return TDDResult(
@@ -464,7 +476,7 @@ The tests MUST import the function from the implementation module.
             return blocks[0].strip(), ""
         return "", ""
 
-    def _revise_code(self, code: str, error_trace: str, spec_name: str) -> str | None:
+    def _revise_code(self, code: str, error_trace: str) -> str | None:
         """Ask LLM to revise code based on error trace."""
         if self._llm is None:
             return None
