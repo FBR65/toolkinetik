@@ -8,7 +8,7 @@ license = { text = "MIT" }
 authors = [{ name = "ToolKinetik Team" }]
 
 dependencies = [
-    "agno",
+    "agno>=2.8.6,<3.0",
     "fastapi",
     "uvicorn",
     "nicegui",
@@ -26,6 +26,8 @@ dev = [
     "pytest",
     "ruff",
     "mypy",
+    "pytest-cov>=7.1.0",
+    "pytest-randomly>=4.1.0",
 ]
 rag = [
     "lancedb",
@@ -61,7 +63,4 @@ python_version = "3.12"
 ignore_missing_imports = true
 
 [dependency-groups]
-dev = [
-    "pytest-cov>=7.1.0",
-    "pytest-randomly>=4.1.0",
-]
+dev = []

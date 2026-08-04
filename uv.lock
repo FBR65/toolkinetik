@@ -2591,6 +2591,8 @@ dependencies = [
 dev = [
     { name = "mypy" },
     { name = "pytest" },
+    { name = "pytest-cov" },
+    { name = "pytest-randomly" },
     { name = "ruff" },
 ]
 rag = [
@@ -2598,15 +2600,9 @@ rag = [
     { name = "sentence-transformers" },
 ]
 
-[package.dev-dependencies]
-dev = [
-    { name = "pytest-cov" },
-    { name = "pytest-randomly" },
-]
-
 [package.metadata]
 requires-dist = [
-    { name = "agno" },
+    { name = "agno", specifier = ">=2.8.6,<3.0" },
     { name = "docker" },
     { name = "fastapi" },
     { name = "httpx" },
@@ -2616,6 +2612,8 @@ requires-dist = [
     { name = "openai" },
     { name = "pydantic-settings" },
     { name = "pytest", marker = "extra == 'dev'" },
+    { name = "pytest-cov", marker = "extra == 'dev'", specifier = ">=7.1.0" },
+    { name = "pytest-randomly", marker = "extra == 'dev'", specifier = ">=4.1.0" },
     { name = "rich" },
     { name = "ruff", marker = "extra == 'dev'" },
     { name = "sentence-transformers", marker = "extra == 'rag'" },
@@ -2626,10 +2624,7 @@ requires-dist = [
 provides-extras = ["dev", "rag"]
 
 [package.metadata.requires-dev]
-dev = [
-    { name = "pytest-cov", specifier = ">=7.1.0" },
-    { name = "pytest-randomly", specifier = ">=4.1.0" },
-]
+dev = []
 
 [[package]]
 name = "torch"
