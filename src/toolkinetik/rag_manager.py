@@ -27,6 +27,7 @@ class RagManager:
         if self._initialized:
             return
         try:
+            import pyarrow as pa
             import lancedb
             from sentence_transformers import SentenceTransformer
 
@@ -35,14 +36,11 @@ class RagManager:
             try:
                 self._table = self._db.open_table("toolkinetik_docs")
             except Exception:
-                schema = lancedb.schema(
-                    {
-                        "vector": "{embedding}",
-                        "text": "str",
-                        "source": "str",
-                    },
-                    mode="create",
-                )
+                schema = pa.schema([
+                    pa.field("vector", pa.list_(pa.float32(), 384)),
+                    pa.field("text", pa.string()),
+                    pa.field("source", pa.string()),
+                ])
                 self._table = self._db.create_table("toolkinetik_docs", schema=schema)
             self._initialized = True
         except ImportError:
