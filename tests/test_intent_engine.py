@@ -73,7 +73,7 @@ class TestIntentEngineBasic:
         registry = MagicMock()
         fn = MagicMock()
         fn.__name__ = "calculate_fibonacci"
-        registry.get_tools.return_value = [fn]
+        registry.registered_tools = {"calculate_fibonacci": fn}
         engine = IntentEngine(registry=registry, llm=MagicMock())
         tools = engine.available_tools()
         assert "calculate_fibonacci" in tools

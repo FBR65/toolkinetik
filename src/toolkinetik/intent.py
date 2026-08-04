@@ -52,13 +52,18 @@ class IntentEngine:
         self._llm = llm
 
     def available_tools(self) -> list[str]:
-        """Return names of currently loaded skills."""
+        """Return names of currently loaded skills without triggering a reload."""
         names: list[str] = []
         if self.registry is None:
             return names
         try:
-            tools = self.registry.get_tools()
-            names = [getattr(t, "__name__", str(t)) for t in tools]
+            tools = self.registry.registered_tools
+            if not tools:
+                # Cold-start: no tools registered yet, do a one-shot load.
+                tools_list = self.registry.get_tools()
+                names = [getattr(t, "__name__", str(t)) for t in tools_list]
+            else:
+                names = [getattr(t, "__name__", str(t)) for t in tools.values()]
         except Exception:
             names = []
         return names
