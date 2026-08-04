@@ -26,6 +26,11 @@ class SandboxRunner:
     _NETWORK_MODE = "none"
     _MEM_LIMIT = "256m"
     _CPU_QUOTA = 50000  # 50% of one CPU (100000 = 1 CPU)
+    _PIDS_LIMIT = 64
+    _CAP_DROP = ["ALL"]
+    _SECURITY_OPT = ["no-new-privileges"]
+    _READ_ONLY = True
+    _TMPFS = {"/tmp": "rw,noexec,nosuid,size=64m"}
 
     # Custom test image tag with pytest pre-installed.
     _TEST_IMAGE_TAG = "toolkinetik-sandbox:latest"
@@ -154,6 +159,11 @@ class SandboxRunner:
                 network_mode=self._NETWORK_MODE,
                 mem_limit=self._MEM_LIMIT,
                 cpu_quota=self._CPU_QUOTA,
+                pids_limit=self._PIDS_LIMIT,
+                cap_drop=self._CAP_DROP,
+                security_opt=self._SECURITY_OPT,
+                read_only=self._READ_ONLY,
+                tmpfs=self._TMPFS,
                 detach=True,
                 tty=False,
             )
