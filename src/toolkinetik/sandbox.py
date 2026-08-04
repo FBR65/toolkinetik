@@ -170,9 +170,9 @@ class SandboxRunner:
             # Wait for completion.  docker SDK wait() returns {"StatusCode": N}.
             result = container.wait(timeout=timeout)
             exit_code = int(result.get("StatusCode", -1))
-            logs_raw = container.logs(stdout=True, stderr=True)
-            stdout = self._decode_logs(logs_raw)
-            return {"exit_code": exit_code, "stdout": stdout, "stderr": ""}
+            stdout = self._decode_logs(container.logs(stdout=True, stderr=False))
+            stderr = self._decode_logs(container.logs(stdout=False, stderr=True))
+            return {"exit_code": exit_code, "stdout": stdout, "stderr": stderr}
         except Exception as exc:
             # Timeout or docker error — return a structured failure.
             return {
