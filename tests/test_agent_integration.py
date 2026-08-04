@@ -2,9 +2,8 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
 import os
+from unittest.mock import MagicMock, patch
 
 # Set API key before importing app (matches test_app.py pattern)
 os.environ.setdefault("AGNO_API_KEY", "test-key-12345")
@@ -19,8 +18,8 @@ def test_app_has_create_agent_integrated() -> None:
     # Agent must have tools (from registry + SkillWriter + IntentEngine)
     assert agent.tools is not None
     # IntentEngine must be initialized
-    from toolkinetik.app import _get_intent_engine
-    engine = _get_intent_engine()
+    from toolkinetik.app import get_intent_engine
+    engine = get_intent_engine()
     assert engine is not None
 
 
@@ -53,21 +52,19 @@ def test_ws_chat_uses_intent_engine() -> None:
 
     Uses a mock agent to avoid needing a real LLM backend.
     """
-    from fastapi.testclient import TestClient
-    from toolkinetik.app import app, registry, IntentEngine
-    from unittest.mock import AsyncMock, MagicMock, patch
+
+    from toolkinetik.app import app
 
     mock_agent = MagicMock()
     mock_response = MagicMock()
     mock_response.content = "Test response"
     mock_agent.run.return_value = mock_response
 
-    with TestClient(app) as client:
-        with client.websocket_connect("/ws/chat?api_key=test-key-12345") as ws:
-            with patch("toolkinetik.app.create_agent", return_value=mock_agent):
-                ws.send_text("test message")
-                try:
-                    received = ws.receive_json()
-                    assert "content" in received or "error" in received
-                except Exception:
-                    pass  # Acceptable — error path also valid in test
+    with TestClient(app) as client, client.websocket_connect("/ws/chat?api_key=test-key-12345") as ws, \
+         patch("toolkinetik.app.create_agent", return_value=mock_agent):
+        ws.send_text("test message")
+        try:
+            received = ws.receive_json()
+            assert "content" in received or "error" in received
+        except Exception:
+            pass  # Acceptable — error path also valid in test

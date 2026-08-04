@@ -10,15 +10,14 @@ close the create-test-promote loop autonomously.
 from __future__ import annotations
 
 import json
-import re
+import logging
 from dataclasses import dataclass, field
 from typing import Any
 
-from toolkinetik.coding_agent import CodingAgent, CodingResult, SkillSpec
-from toolkinetik.promotion import SkillPromoter
+from toolkinetik.coding_agent import SkillSpec
 from toolkinetik.registry import DynamicToolRegistry
-from toolkinetik.sandbox import SandboxRunner
-from toolkinetik.tdd_loop import TDDLoop
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # IntentEngine (LLM-driven)
@@ -52,13 +51,18 @@ class IntentEngine:
         self._llm = llm
 
     def available_tools(self) -> list[str]:
-        """Return names of currently loaded skills."""
+        """Return names of currently loaded skills without triggering a reload."""
         names: list[str] = []
         if self.registry is None:
             return names
         try:
-            tools = self.registry.get_tools()
-            names = [getattr(t, "__name__", str(t)) for t in tools]
+            tools = self.registry.registered_tools
+            if not tools:
+                # Cold-start: no tools registered yet, do a one-shot load.
+                tools_list = self.registry.get_tools()
+                names = [getattr(t, "__name__", str(t)) for t in tools_list]
+            else:
+                names = [getattr(t, "__name__", str(t)) for t in tools.values()]
         except Exception:
             names = []
         return names
@@ -68,6 +72,11 @@ class IntentEngine:
         tool_names = self.available_tools()
         intent_data = self._ask_llm(user_request, tool_names)
         intent = intent_data.get("intent", "chat")
+
+        valid_intents = {"execute_skill", "create_skill", "rag_search", "chat"}
+        if intent not in valid_intents:
+            logger.warning("LLM returned unknown intent %r; degrading to chat", intent)
+            intent = "chat"
 
         if intent == "execute_skill":
             return SkillMatch(
@@ -104,12 +113,18 @@ class IntentEngine:
         if self._llm is None:
             return {"intent": "chat"}
         prompt = self._build_prompt(user_request, tool_names)
-        response = self._llm.chat.completions.create(
-            model="gpt-4o",
-            messages=[{"role": "user", "content": prompt}],
-            response_format={"type": "json_object"},
-        )
-        return json.loads(response.choices[0].message.content)
+        from toolkinetik.config import get_settings
+        try:
+            response = self._llm.chat.completions.create(
+                model=get_settings().OPENAI_MODEL,
+                messages=[{"role": "user", "content": prompt}],
+                response_format={"type": "json_object"},
+                timeout=get_settings().LLM_TIMEOUT,
+            )
+            return json.loads(response.choices[0].message.content)
+        except Exception:
+            logger.exception("LLM classify failed; degrading to chat intent")
+            return {"intent": "chat"}
 
     def _build_prompt(self, user_request: str, tool_names: list[str]) -> str:
         """Build the LLM classification prompt."""
@@ -130,136 +145,3 @@ User request: "{user_request}"
 
 Output ONLY valid JSON:
 """
-
-
-# ---------------------------------------------------------------------------
-# IntentDetector (legacy — keyword-based, kept for backward compatibility)
-# ---------------------------------------------------------------------------
-
-
-class IntentDetector:
-    """Detect when a user request needs a skill that doesn't yet exist."""
-
-    def __init__(self, registry: DynamicToolRegistry | None = None) -> None:
-        self.registry = registry
-
-    # -- public API ---------------------------------------------------------
-
-    def detect_missing_skill(self, user_request: str) -> SkillSpec | None:
-        """Return a SkillSpec if no existing tool matches, else None."""
-        tool_names: list[str] = []
-        if self.registry is not None:
-            try:
-                tools = self.registry.get_tools()
-                tool_names = [getattr(t, "__name__", str(t)) for t in tools]
-            except Exception:
-                tool_names = []
-
-        # A match means an existing tool can handle the request.
-        if self._match_tools(user_request, tool_names):
-            return None
-
-        skill_name = self._extract_skill_name(user_request)
-        return SkillSpec(
-            name=skill_name,
-            description=f"Auto-generated skill for: {user_request}",
-            signature=f"def {skill_name}(*args, **kwargs):",
-            test_cases=[f"{skill_name} handles basic usage"],
-        )
-
-    # -- helpers ------------------------------------------------------------
-
-    def _extract_skill_name(self, request: str) -> str:
-        """Convert natural language request to a snake_case skill name.
-
-        Examples:
-          "PDF to markdown"     -> "pdf_to_markdown"
-          "calculate fibonacci" -> "calculate_fibonacci"
-        """
-        # Lowercase and replace common separators with spaces.
-        text = request.lower().strip()
-        # Replace hyphens and slashes with spaces.
-        text = text.replace("-", " ").replace("/", " ")
-        # Collapse non-alphanumeric to spaces.
-        text = re.sub(r"[^a-z0-9]+", " ", text)
-        # Split into words, drop empties.
-        words = [w for w in text.split() if w]
-        # Join with underscores.
-        return "_".join(words)
-
-    def _match_tools(self, request: str, tool_names: list[str]) -> bool:
-        """Return True if any tool name keyword appears in the request."""
-        request_lower = request.lower()
-        for tool_name in tool_names:
-            name = tool_name.lower()
-            # Split the tool name into constituent keywords.
-            parts = name.split("_")
-            for part in parts:
-                if len(part) >= 3 and part in request_lower:
-                    return True
-            # Also check the full name as a substring.
-            if len(name) >= 3 and name in request_lower:
-                return True
-        return False
-
-
-# ---------------------------------------------------------------------------
-# SkillCreationOrchestrator
-# ---------------------------------------------------------------------------
-
-
-class SkillCreationOrchestrator:
-    """Orchestrate the detect → create → test → promote loop."""
-
-    def __init__(
-        self,
-        detector: IntentDetector,
-        coding_agent: CodingAgent,
-        sandbox: SandboxRunner,
-        promoter: SkillPromoter,
-        tdd_loop: TDDLoop,
-    ) -> None:
-        self.detector = detector
-        self.coding_agent = coding_agent
-        self.sandbox = sandbox
-        self.promoter = promoter
-        self.tdd_loop = tdd_loop
-
-    def handle_request(self, user_request: str) -> str:
-        """Process a user request through the full skill-creation loop.
-
-        Returns a human-readable status message.
-        """
-        spec = self.detector.detect_missing_skill(user_request)
-        if spec is None:
-            return f"Skill already exists for request: {user_request}"
-
-        # Generate code + tests.
-        coding_result: CodingResult = self.coding_agent.create_skill(spec)
-        if not coding_result.success:
-            return (
-                f"Skill creation failed for '{spec.name}': {coding_result.error}"
-            )
-
-        # Run TDD loop.
-        tdd_result = self.tdd_loop.run(spec, coding_result.code, coding_result.tests)
-        if not tdd_result.success:
-            return (
-                f"TDD loop failed for '{spec.name}': {tdd_result.error}"
-            )
-
-        # Promote the skill.
-        promotion_result = self.promoter.promote(
-            skill_name=spec.name,
-            code=coding_result.code,
-            metadata={"description": spec.description, "signature": spec.signature},
-        )
-        if not promotion_result.success:
-            return (
-                f"Promotion failed for '{spec.name}': {promotion_result.error}"
-            )
-
-        return (
-            f"Skill '{spec.name}' created, tested, and promoted successfully "
-            f"(git_committed={promotion_result.git_committed})"
-        )

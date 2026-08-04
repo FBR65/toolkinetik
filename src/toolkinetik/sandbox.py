@@ -9,6 +9,7 @@ daemon is required for the test suite.
 
 from __future__ import annotations
 
+import logging
 import os
 import shutil
 import tempfile
@@ -18,6 +19,8 @@ import docker
 
 from toolkinetik.config import get_settings
 
+logger = logging.getLogger(__name__)
+
 
 class SandboxRunner:
     """Run Python code in isolated, resource-limited Docker containers."""
@@ -26,6 +29,11 @@ class SandboxRunner:
     _NETWORK_MODE = "none"
     _MEM_LIMIT = "256m"
     _CPU_QUOTA = 50000  # 50% of one CPU (100000 = 1 CPU)
+    _PIDS_LIMIT = 64
+    _CAP_DROP = ["ALL"]
+    _SECURITY_OPT = ["no-new-privileges"]
+    _READ_ONLY = True
+    _TMPFS = {"/tmp": "rw,noexec,nosuid,size=64m"}
 
     # Custom test image tag with pytest pre-installed.
     _TEST_IMAGE_TAG = "toolkinetik-sandbox:latest"
@@ -70,7 +78,10 @@ class SandboxRunner:
         access is needed during test execution.  The image is built on first
         use from ``python:3.12-slim`` + ``pip install pytest``.
         """
-        test_image = self._ensure_test_image()
+        try:
+            test_image = self._ensure_test_image()
+        except RuntimeError as exc:
+            return {"exit_code": -1, "stdout": "", "stderr": str(exc)}
         tmpdir = Path(tempfile.mkdtemp(prefix="sandbox_tests_"))
         try:
             (tmpdir / "skill.py").write_text(skill_code)
@@ -99,7 +110,8 @@ class SandboxRunner:
         """Build (once) and return the custom test image tag.
 
         The image is built from python:3.12-slim with pytest pre-installed,
-        so that run_tests can execute with network_mode="none".
+        so that run_tests can execute with network_mode="none".  Raises
+        RuntimeError if the build fails (no silent fallback).
         """
         if self._test_image_built:
             return self._TEST_IMAGE_TAG
@@ -124,10 +136,10 @@ class SandboxRunner:
                 rm=True,
             )
             self._test_image_built = True
-        except Exception:
-            # If build fails (e.g. no Docker daemon in tests), fall back to
-            # the base image — run_tests will use pip install with network.
-            pass
+        except Exception as exc:
+            raise RuntimeError(
+                f"sandbox image build failed: {exc}"
+            ) from exc
         return self._TEST_IMAGE_TAG
 
     def _exec_container(
@@ -154,15 +166,20 @@ class SandboxRunner:
                 network_mode=self._NETWORK_MODE,
                 mem_limit=self._MEM_LIMIT,
                 cpu_quota=self._CPU_QUOTA,
+                pids_limit=self._PIDS_LIMIT,
+                cap_drop=self._CAP_DROP,
+                security_opt=self._SECURITY_OPT,
+                read_only=self._READ_ONLY,
+                tmpfs=self._TMPFS,
                 detach=True,
                 tty=False,
             )
             # Wait for completion.  docker SDK wait() returns {"StatusCode": N}.
             result = container.wait(timeout=timeout)
             exit_code = int(result.get("StatusCode", -1))
-            logs_raw = container.logs(stdout=True, stderr=True)
-            stdout = self._decode_logs(logs_raw)
-            return {"exit_code": exit_code, "stdout": stdout, "stderr": ""}
+            stdout = self._decode_logs(container.logs(stdout=True, stderr=False))
+            stderr = self._decode_logs(container.logs(stdout=False, stderr=True))
+            return {"exit_code": exit_code, "stdout": stdout, "stderr": stderr}
         except Exception as exc:
             # Timeout or docker error — return a structured failure.
             return {

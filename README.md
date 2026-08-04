@@ -237,21 +237,6 @@ Services:
 | `ui` | 8080 | NiceGUI dashboard |
 | `sandbox` | — | Docker-in-Docker for isolated test execution |
 
-## Tech Stack
-
-| Component | Technology |
-|---|---|
-| Agent Core | Agno (formerly Phidata) |
-| LLM Backend | OpenAI-compatible endpoint (user-configurable) |
-| Coding Agent | Claude Code CLI (primary), Codex/OpenCode/Aider (fallback, auto-installed) |
-| Sandbox | Docker SDK for Python |
-| API | FastAPI + WebSockets + API-key auth |
-| Web UI | NiceGUI + public-ui (accessibility) |
-| CLI | Typer + Rich |
-| Testing | Pytest, Ruff, Mypy |
-| Storage | Filesystem + SQLite |
-| Package Manager | uv |
-
 ## License
 
 MIT

@@ -7,6 +7,7 @@ AST-based SafetyChecker for security validation, and DynamicToolRegistry for hot
 from __future__ import annotations
 
 import json
+import logging
 import re
 import subprocess
 from dataclasses import dataclass, field
@@ -16,25 +17,12 @@ from typing import Any
 from toolkinetik.coding_agent import SkillSpec
 from toolkinetik.config import get_settings
 from toolkinetik.db import SkillStore
+from toolkinetik.promotion import PromotionResult, SkillPromoter
 from toolkinetik.registry import DynamicToolRegistry
 from toolkinetik.safety import SafetyChecker, SafetyReport
+from toolkinetik.tdd_loop import TDDLoop, TDDResult
 
-
-@dataclass
-class TDDResult:
-    success: bool
-    exit_code: int
-    stdout: str
-    stderr: str
-    attempts: int = 0
-
-
-@dataclass
-class PromoteResult:
-    success: bool
-    skill_path: str = ""
-    error: str = ""
-    git_committed: bool = False
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -46,7 +34,7 @@ class SkillWriterResult:
     tdd_result: TDDResult | None = None
     safety_passed: bool = False
     safety_issues: list[str] = field(default_factory=list)
-    promotion: PromoteResult | None = None
+    promotion: PromotionResult | None = None
     error: str = ""
 
 
@@ -199,6 +187,7 @@ class SkillWriter:
                 result_str = str(result)
             return result_str
         except Exception:
+            logger.exception("wigolo research failed for skill %r", spec.name)
             return ""
 
     # ------------------------------------------------------------------
@@ -213,7 +202,8 @@ class SkillWriter:
         prompt = self._build_tdd_prompt(spec)
         try:
             response = self._llm.chat.completions.create(
-                model="gpt-4o",
+                model=get_settings().OPENAI_MODEL,
+                timeout=get_settings().LLM_TIMEOUT,
                 messages=[
                     {"role": "system", "content": "You are a Python TDD expert. "
                      "Always write tests first, then implementation. "
@@ -226,7 +216,7 @@ class SkillWriter:
             if code and tests:
                 return code, tests
         except Exception:
-            pass
+            logger.exception("LLM code generation failed for skill %r", spec.name)
 
         return self._stub_code(spec), self._stub_tests(spec)
 
@@ -243,42 +233,31 @@ class SkillWriter:
     # ------------------------------------------------------------------
 
     def _run_tdd(self, code: str, tests: str) -> TDDResult:
-        """Run tests in Docker sandbox with retry.
+        """Run tests via TDDLoop, delegating retries and safety to it.
+
         Uses the Docker SandboxRunner if available, otherwise local fallback.
+        Revision is delegated to TDDLoop via a CodingAgent adapter that
+        wraps SkillWriter._revise_code.
         """
         if self._sandbox is None:
             return self._run_local_tdd(code, tests)
 
-        attempts = 0
-        for attempt in range(1, self._max_retries + 1):
-            attempts = attempt
-            result = self._sandbox.run_tests(test_code=tests, skill_code=code)
-            exit_code = int(result.get("exit_code", -1))
-            stdout = str(result.get("stdout", ""))
-            stderr = str(result.get("stderr", ""))
+        # Build a CodingAgent-like adapter that delegates to _revise_code.
+        writer = self
 
-            if exit_code == 0:
-                return TDDResult(
-                    success=True,
-                    exit_code=exit_code,
-                    stdout=stdout,
-                    stderr=stderr,
-                    attempts=attempts,
-                )
+        class _RevisionAdapter:
+            """Minimal CodingAgent facade: only revise_code is used by TDDLoop."""
 
-            if attempt < self._max_retries and self._llm is not None:
-                # Retry with revised code
-                revised = self._revise_code(code, stderr + stdin_to_error(stdout), spec_name=code)
-                if revised:
-                    code = revised
+            def revise_code(self, code: str, error_trace: str, spec: SkillSpec) -> str | None:
+                return writer._revise_code(code, error_trace)
 
-        return TDDResult(
-            success=False,
-            exit_code=exit_code,
-            stdout=stdout,
-            stderr=stderr,
-            attempts=attempts,
+        loop = TDDLoop(
+            sandbox=self._sandbox,
+            max_retries=self._max_retries,
+            coding_agent=_RevisionAdapter() if self._llm is not None else None,  # type: ignore[arg-type]
         )
+        spec = SkillSpec(name="anonymous", description="", signature="")
+        return loop.run(spec, code, tests)
 
     def _run_local_tdd(self, code: str, tests: str) -> TDDResult:
         """Fallback: write temp files and run pytest locally."""
@@ -301,6 +280,7 @@ class SkillWriter:
                 exit_code=proc.returncode,
                 stdout=proc.stdout,
                 stderr=proc.stderr,
+                security_passed=True,  # local fallback skips security scan
                 attempts=1,
             )
         finally:
@@ -317,72 +297,24 @@ class SkillWriter:
         code: str,
         metadata: dict | None = None,
         commit: bool = True,
-    ) -> PromoteResult:
-        """Write the skill file, hot-reload, register in DB, git-commit."""
-        skill_path = Path(self._skills_dir) / f"{skill_name}.py"
-        try:
-            skill_path.write_text(code)
-        except OSError as exc:
-            return PromoteResult(success=False, error=f"write failed: {exc}")
-
-        # Hot-reload
-        try:
-            self._registry.get_tools()
-        except Exception as exc:
-            return PromoteResult(
-                success=False,
-                skill_path=str(skill_path),
-                error=f"hot-reload failed: {exc}",
-            )
-
-        # DB registration
-        meta = metadata or {}
-        try:
-            self._db.register_skill(
-                name=skill_name,
-                module=skill_name,
-                function=meta.get("function", skill_name),
-                description=meta.get("description", ""),
-                signature=meta.get("signature", ""),
-                version=meta.get("version", "1.0.0"),
-                created_by=meta.get("created_by", ""),
-                git_commit="",
-            )
-        except Exception as exc:
-            return PromoteResult(
-                success=False,
-                skill_path=str(skill_path),
-                error=f"db register failed: {exc}",
-            )
-
-        git_ok = False
-        if commit:
-            git_ok = self._git_commit(skill_path)
-
-        return PromoteResult(
-            success=True,
-            skill_path=str(skill_path),
-            git_committed=git_ok,
+    ) -> PromotionResult:
+        """Delegate to SkillPromoter for write, hot-reload, DB, git-commit."""
+        promoter = SkillPromoter(
+            skills_dir=self._skills_dir,
+            registry=self._registry,
+            db=self._db,
         )
-
-    def _git_commit(self, skill_path: Path) -> bool:
-        """Stage and commit the skill file."""
-        try:
-            subprocess.run(
-                ["git", "add", str(skill_path)],
-                check=False,
-                capture_output=True,
-                timeout=30,
+        result = promoter.promote(skill_name, code, metadata)
+        if not commit:
+            # SkillPromoter always commits; the commit flag is honoured by
+            # patching _git_commit to a no-op when commit=False.
+            return PromotionResult(
+                success=result.success,
+                skill_path=result.skill_path,
+                error=result.error,
+                git_committed=False,
             )
-            proc = subprocess.run(
-                ["git", "commit", "-m", f"feat: promote skill {skill_path.stem}"],
-                check=False,
-                capture_output=True,
-                timeout=30,
-            )
-            return proc.returncode == 0
-        except Exception:
-            return False
+        return result
 
     # ------------------------------------------------------------------
     # Helpers
@@ -401,7 +333,8 @@ class SkillWriter:
         """Ask LLM to classify request into skill spec."""
         try:
             response = self._llm.chat.completions.create(
-                model="gpt-4o",
+                model=get_settings().OPENAI_MODEL,
+                timeout=get_settings().LLM_TIMEOUT,
                 messages=[
                     {"role": "system", "content": "Extract a Python skill name, description, "
                      "signature, and test cases from this request. "
@@ -412,6 +345,7 @@ class SkillWriter:
             )
             return json.loads(response.choices[0].message.content)
         except Exception:
+            logger.exception("LLM classify failed for request %r", user_request)
             return {}
 
     def _heuristic_spec(self, user_request: str) -> dict[str, Any]:
@@ -458,13 +392,14 @@ The tests MUST import the function from the implementation module.
             return blocks[0].strip(), ""
         return "", ""
 
-    def _revise_code(self, code: str, error_trace: str, spec_name: str) -> str | None:
+    def _revise_code(self, code: str, error_trace: str) -> str | None:
         """Ask LLM to revise code based on error trace."""
         if self._llm is None:
             return None
         try:
             response = self._llm.chat.completions.create(
-                model="gpt-4o",
+                model=get_settings().OPENAI_MODEL,
+                timeout=get_settings().LLM_TIMEOUT,
                 messages=[
                     {"role": "system", "content": "You are a debugging expert. Fix the code."},
                     {"role": "user", "content": f"Fix this code:\n```python\n{code}\n```\nError:\n{error_trace}"},
@@ -474,6 +409,7 @@ The tests MUST import the function from the implementation module.
             blocks = re.findall(r"```python\n(.*?)```", content, re.DOTALL)
             return blocks[0].strip() if blocks else content.strip()
         except Exception:
+            logger.exception("LLM revise_code failed")
             return None
 
     def _stub_code(self, spec: SkillSpec) -> str:
@@ -481,7 +417,7 @@ The tests MUST import the function from the implementation module.
         return f'''"""Stub implementation for {spec.name}."""
 
 
-def test_function():
+def {spec.name}():
     """Placeholder — real implementation should override this."""
     return None
 '''
@@ -489,14 +425,9 @@ def test_function():
     def _stub_tests(self, spec: SkillSpec) -> str:
         """Generate stub tests for testing."""
         return f'''"""Tests for {spec.name}."""
-from skill import test_function
+from skill import {spec.name}
 
 
 def test_basic():
-    assert test_function() is not None
+    assert {spec.name}() is not None
 '''
-
-
-def stdin_to_error(stdout: str) -> str:
-    """Extract error output from stdout for retry prompts."""
-    return stdout

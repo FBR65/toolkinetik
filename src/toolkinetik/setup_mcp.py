@@ -17,10 +17,14 @@ results — the agent can still operate, just without wigolo research data.
 from __future__ import annotations
 
 import json
+import logging
+import re
 import shutil
 import subprocess
 import time
 from typing import Any
+
+logger = logging.getLogger(__name__)
 
 
 class _StubClient:
@@ -37,14 +41,21 @@ class _WigoloClient:
     """Minimal JSON-RPC client for the wigolo MCP server.
 
     Communicates via stdin/stdout JSON-RPC 2.0 — no `mcp` SDK needed.
+    Supports both newline-delimited and Content-Length framing, skips
+    server-initiated notifications (messages without `id`), and performs
+    an `initialize` / `notifications/initialized` handshake on startup.
     """
+
+    _INIT_TIMEOUT_S = 5.0  # max seconds to wait for initialize response
+    _POLL_INTERVAL_S = 0.05  # sleep between readline attempts
 
     def __init__(self) -> None:
         self._proc: subprocess.Popen | None = None
         self._id = 0
+        self._initialized = False
 
     def _ensure_running(self) -> None:
-        if self._proc is not None and self._proc.poll() is None:
+        if self._proc is not None and self._proc.poll() is None and self._initialized:
             return
         uvx = shutil.which("uvx")
         if uvx is None:
@@ -57,7 +68,76 @@ class _WigoloClient:
             text=True,
             bufsize=1,
         )
-        time.sleep(1.0)  # Give server time to initialize
+        # Perform MCP handshake instead of a fixed time.sleep.
+        self._handshake()
+
+    def _handshake(self) -> None:
+        """Send `initialize`, wait for the response, then send `notifications/initialized`."""
+        if self._proc is None or self._proc.stdin is None or self._proc.stdout is None:
+            raise ConnectionError("wigolo server pipes not initialized")
+        # Send initialize with a fresh id.
+        self._id += 1
+        init_id = self._id
+        init_msg = json.dumps({
+            "jsonrpc": "2.0",
+            "id": init_id,
+            "method": "initialize",
+            "params": {"protocolVersion": "2024-11-05", "capabilities": {}, "clientInfo": {"name": "toolkinetik", "version": "0.1.0"}},
+        })
+        self._proc.stdin.write(init_msg + "\n")
+        self._proc.stdin.flush()
+        # Poll for the initialize response (skip notifications / blank lines).
+        deadline = time.monotonic() + self._INIT_TIMEOUT_S
+        while time.monotonic() < deadline:
+            line = self._proc.stdout.readline()
+            if not line:
+                time.sleep(self._POLL_INTERVAL_S)
+                continue
+            msg = self._read_message(line)
+            if msg is None:
+                continue  # blank / unparseable — poll again
+            if "id" not in msg:
+                continue  # server notification, not our response
+            if msg["id"] != init_id:
+                continue  # response to a different request
+            break
+        else:
+            raise ConnectionError("wigolo initialize handshake timed out")
+        # Send initialized notification.
+        notified = json.dumps({"jsonrpc": "2.0", "method": "notifications/initialized"})
+        self._proc.stdin.write(notified + "\n")
+        self._proc.stdin.flush()
+        self._initialized = True
+
+    def _read_message(self, line: str) -> dict | None:
+        """Parse one JSON-RPC message from a stdout line.
+
+        Supports Content-Length framing: a line starting with
+        `Content-Length:` is the header of a framed message; the body
+        follows on subsequent readline() calls.
+        """
+        if not line or not line.strip():
+            return None
+        # Content-Length framing: "Content-Length: N\r\n\r\n{body}".
+        m = re.match(r"Content-Length:\s*(\d+)\s*\r?\n\r?\n(.*)", line, re.DOTALL)
+        if m:
+            declared = int(m.group(1))
+            body_so_far = m.group(2)
+            # If the body is shorter than declared, read more lines.
+            while len(body_so_far) < declared and self._proc is not None and self._proc.stdout is not None:
+                more = self._proc.stdout.readline()
+                if not more:
+                    break
+                body_so_far += more
+            try:
+                return json.loads(body_so_far[:declared])
+            except json.JSONDecodeError:
+                return None
+        # Newline-delimited JSON.
+        try:
+            return json.loads(line)
+        except json.JSONDecodeError:
+            return None
 
     def _call(self, method: str, params: dict | None = None) -> Any:
         if self._proc is None or self._proc.poll() is not None:
@@ -65,15 +145,26 @@ class _WigoloClient:
         if self._proc.stdin is None or self._proc.stdout is None:
             raise ConnectionError("wigolo server pipes not initialized")
         self._id += 1
-        msg = json.dumps({"jsonrpc": "2.0", "id": self._id, "method": method, "params": params or {}})
+        call_id = self._id
+        msg = json.dumps({"jsonrpc": "2.0", "id": call_id, "method": method, "params": params or {}})
         self._proc.stdin.write(msg + "\n")
         self._proc.stdin.flush()
-        # Read one line of response
-        line = self._proc.stdout.readline()
-        if not line:
-            raise ConnectionError("wigolo server returned empty response")
-        resp = json.loads(line)
-        return resp.get("result", {})
+        # Read lines until we get a response with our id (skip notifications,
+        # blank lines, and unrelated responses).
+        while True:
+            line = self._proc.stdout.readline()
+            if not line:
+                raise ConnectionError("wigolo server returned empty response")
+            parsed = self._read_message(line)
+            if parsed is None:
+                continue  # blank / unparseable
+            if "id" not in parsed:
+                continue  # server notification, not a response
+            if parsed["id"] != call_id:
+                continue  # response to a different request
+            if "error" in parsed:
+                raise ConnectionError(f"wigolo error: {parsed['error']}")
+            return parsed.get("result", {})
 
     def research(self, query: str, context: str = "") -> dict:
         self._ensure_running()
@@ -118,6 +209,7 @@ class WigoloMCPToolkit:
         try:
             return self._client.research(query=query, context=context)
         except Exception:
+            logger.exception("wigolo research failed; falling back to stub")
             self._use_stub = True
             stub = getattr(self._client, "_stub", _StubClient())
             return stub.research(query, context)
@@ -133,6 +225,7 @@ class WigoloMCPToolkit:
         try:
             return self._client.extract(url=url)
         except Exception:
+            logger.exception("wigolo extract failed; falling back to stub")
             self._use_stub = True
             stub = getattr(self._client, "_stub", _StubClient())
             return stub.extract(url)

@@ -10,6 +10,9 @@ from collections.abc import Callable
 from glob import glob
 from pathlib import Path
 
+# Prefix for skill modules to avoid collisions in sys.modules.
+_MODULE_PREFIX = "toolkinetik_skills_"
+
 
 class DynamicToolRegistry:
     """Discovers, imports, and tracks callable tools from a skills directory.
@@ -42,37 +45,44 @@ class DynamicToolRegistry:
 
         Returns a fresh list every call (supports hot reload).
         """
+        importlib.invalidate_caches()
         self.registered_tools = {}
         pattern = str(Path(self.skills_dir) / "*.py")
         skill_files = sorted(glob(pattern))
 
-        for filepath in skill_files:
-            stem = Path(filepath).stem
+        # Avoid stale .pyc bytecode when hot-reloading source edits.
+        prev_dont_write = sys.dont_write_bytecode
+        sys.dont_write_bytecode = True
+        try:
+            for filepath in skill_files:
+                stem = Path(filepath).stem
 
-            # Skip dunder files (__init__, __helper__, etc.)
-            if stem.startswith("__"):
-                continue
-
-            module_name = stem
-
-            # Always (re)load from disk for hot-reload support.
-            spec = importlib.util.spec_from_file_location(module_name, filepath)
-            if spec is None or spec.loader is None:
-                continue
-            module = importlib.util.module_from_spec(spec)
-            # Register in sys.modules so importlib.reload works and
-            # intra-package references resolve.
-            sys.modules[module_name] = module
-            spec.loader.exec_module(module)
-
-            # Collect public callables (functions defined in this module).
-            for attr_name, obj in inspect.getmembers(module, inspect.isfunction):
-                # Skip private/dunder functions
-                if attr_name.startswith("_"):
+                # Skip dunder files (__init__, __helper__, etc.)
+                if stem.startswith("__"):
                     continue
-                # Only functions actually defined in this module (not imports)
-                if obj.__module__ != module_name:
+
+                module_name = _MODULE_PREFIX + stem
+
+                # Always (re)load from disk for hot-reload support.
+                spec = importlib.util.spec_from_file_location(module_name, filepath)
+                if spec is None or spec.loader is None:
                     continue
-                self.registered_tools[attr_name] = obj
+                module = importlib.util.module_from_spec(spec)
+                # Register in sys.modules so importlib.reload works and
+                # intra-package references resolve.
+                sys.modules[module_name] = module
+                spec.loader.exec_module(module)
+
+                # Collect public callables (functions defined in this module).
+                for attr_name, obj in inspect.getmembers(module, inspect.isfunction):
+                    # Skip private/dunder functions
+                    if attr_name.startswith("_"):
+                        continue
+                    # Only functions actually defined in this module (not imports)
+                    if obj.__module__ != module_name:
+                        continue
+                    self.registered_tools[attr_name] = obj
+        finally:
+            sys.dont_write_bytecode = prev_dont_write
 
         return list(self.registered_tools.values())

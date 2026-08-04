@@ -57,16 +57,26 @@ class SkillStore:
         created_by: str = "",
         git_commit: str = "",
     ) -> None:
-        """Insert or replace a skill row."""
+        """Insert a new skill, or update an existing one while preserving created_at."""
         now = self._now()
         with self._connect() as conn:
             conn.execute(
                 """
-                INSERT OR REPLACE INTO skills
+                INSERT INTO skills
                     (name, module, function, description, signature,
                      version, status, created_by, git_commit,
                      created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)
+                ON CONFLICT(name) DO UPDATE SET
+                    module      = excluded.module,
+                    function    = excluded.function,
+                    description = excluded.description,
+                    signature   = excluded.signature,
+                    version     = excluded.version,
+                    status      = excluded.status,
+                    created_by  = excluded.created_by,
+                    git_commit  = excluded.git_commit,
+                    updated_at  = excluded.updated_at
                 """,
                 (name, module, function, description, signature,
                  version, created_by, git_commit, now, now),

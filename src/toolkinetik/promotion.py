@@ -8,6 +8,7 @@ file, marks the DB row as deleted, and re-triggers hot-reload.
 
 from __future__ import annotations
 
+import logging
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
@@ -15,6 +16,23 @@ from pathlib import Path
 from toolkinetik.config import get_settings
 from toolkinetik.db import SkillStore
 from toolkinetik.registry import DynamicToolRegistry
+
+logger = logging.getLogger(__name__)
+
+
+def safe_skill_path(skills_dir: str, skill_name: str) -> Path | None:
+    """Resolve ``<skills_dir>/<skill_name>.py`` and guard against path traversal.
+
+    Returns the resolved path if it stays inside *skills_dir*, otherwise ``None``.
+    Handles ``..`` segments and absolute paths.
+    """
+    base = Path(skills_dir).resolve()
+    candidate = (base / f"{skill_name}.py").resolve()
+    try:
+        candidate.relative_to(base)
+    except ValueError:
+        return None
+    return candidate
 
 
 @dataclass
@@ -55,7 +73,12 @@ class SkillPromoter:
         metadata: dict | None = None,
     ) -> PromotionResult:
         """Write *code* to ``<skills_dir>/<skill_name>.py`` and register it."""
-        skill_path = Path(self.skills_dir) / f"{skill_name}.py"
+        skill_path = safe_skill_path(self.skills_dir, skill_name)
+        if skill_path is None:
+            return PromotionResult(
+                success=False,
+                error=f"path traversal detected in skill name: {skill_name!r}",
+            )
         try:
             skill_path.write_text(code)
         except OSError as exc:
@@ -103,7 +126,9 @@ class SkillPromoter:
 
     def rollback(self, skill_name: str) -> bool:
         """Remove the skill file, mark DB row deleted, and hot-reload."""
-        skill_path = Path(self.skills_dir) / f"{skill_name}.py"
+        skill_path = safe_skill_path(self.skills_dir, skill_name)
+        if skill_path is None:
+            return False
         try:
             if skill_path.exists():
                 skill_path.unlink()
@@ -114,7 +139,7 @@ class SkillPromoter:
             self.db.delete_skill(skill_name)
         except Exception:
             # DB may not have the row; don't fail rollback for that.
-            pass
+            logger.exception("rollback: db.delete_skill failed for %r", skill_name)
 
         try:
             self.registry.get_tools()

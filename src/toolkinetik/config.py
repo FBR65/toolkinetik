@@ -22,12 +22,17 @@ def _load_or_generate_api_key() -> str:
     if env_key:
         return env_key
 
-    # Try to read the persisted key.
     key_file = _api_key_file()
+    # Try to read the persisted key.
     try:
         if key_file.exists():
             saved = key_file.read_text().strip()
             if saved:
+                # Ensure restrictive permissions on the existing file.
+                try:
+                    os.chmod(key_file, 0o600)
+                except OSError:
+                    pass
                 return saved
     except OSError:
         pass
@@ -37,6 +42,10 @@ def _load_or_generate_api_key() -> str:
     try:
         key_file.parent.mkdir(parents=True, exist_ok=True)
         key_file.write_text(new_key)
+        try:
+            os.chmod(key_file, 0o600)
+        except OSError:
+            pass
     except OSError:
         pass  # If we can't persist, still return the generated key for this session.
     return new_key
@@ -58,6 +67,7 @@ class Settings(BaseSettings):
 
     # ToolKinetik settings
     AGNO_API_KEY: str = ""
+    LLM_TIMEOUT: int = 60
 
     # Sandbox settings
     SANDBOX_IMAGE: str = "python:3.12-slim"

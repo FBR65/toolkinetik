@@ -37,18 +37,6 @@ class SafetyReport:
 class SafetyChecker:
     """AST-based static analysis for forbidden calls and imports."""
 
-    FORBIDDEN_CALLS = {
-        "os.system",
-        "os.popen",
-        "subprocess.call",
-        "subprocess.run",
-        "subprocess.Popen",
-        "eval",
-        "exec",
-        "__import__",
-        "compile",
-    }
-
     # Map of forbidden simple/builtin call names (no module prefix).
     _FORBIDDEN_BUILTIN_CALLS = {"eval", "exec", "__import__", "compile"}
 

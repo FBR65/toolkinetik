@@ -17,7 +17,8 @@ def _make_mock_client(exit_code: int = 0, logs: str = "ok", wait_raises: Excepti
     """Return (mock_client, mock_container) simulating docker.from_env().
 
     The mock container's run()/wait()/logs()/remove() methods are configured
-    so tests can inspect the calls.
+    so tests can inspect the calls. logs() returns the same bytes for both
+    stdout and stderr streams (split via kwargs).
     """
     mock_container = MagicMock(name="container")
 
@@ -27,12 +28,18 @@ def _make_mock_client(exit_code: int = 0, logs: str = "ok", wait_raises: Excepti
     else:
         mock_container.wait.return_value = {"StatusCode": exit_code}
 
-    # container.logs() returns bytes (docker SDK returns bytes by default).
+    # container.logs() returns bytes split by stream kwarg.
     if isinstance(logs, str):
         logs_bytes = logs.encode()
     else:
         logs_bytes = logs
-    mock_container.logs.return_value = logs_bytes
+
+    def _logs(stdout=True, stderr=True, **_):
+        # Default mock: both streams return the same payload so legacy
+        # tests that check "X in stdout OR stderr" still work.
+        return logs_bytes
+
+    mock_container.logs.side_effect = _logs
 
     mock_client = MagicMock(name="docker_client")
     mock_client.containers.run.return_value = mock_container
@@ -66,7 +73,7 @@ class TestRunCode:
     def test_run_code_success(self, patched_client):
         _client, container, _ = patched_client
         container.wait.return_value = {"StatusCode": 0}
-        container.logs.return_value = b"hello"
+        container.logs.side_effect = lambda stdout=True, stderr=True, **_: b"hello"
 
         sandbox = SandboxRunner()
         result = sandbox.run_code("print('hello')")
@@ -78,7 +85,7 @@ class TestRunCode:
     def test_run_code_failure(self, patched_client):
         _client, container, _ = patched_client
         container.wait.return_value = {"StatusCode": 1}
-        container.logs.return_value = b"error message"
+        container.logs.side_effect = lambda stdout=True, stderr=True, **_: b"error message"
 
         sandbox = SandboxRunner()
         result = sandbox.run_code("raise ValueError('boom')")
@@ -105,7 +112,7 @@ class TestRunTests:
     def test_run_tests_success(self, patched_client):
         _client, container, _ = patched_client
         container.wait.return_value = {"StatusCode": 0}
-        container.logs.return_value = b"1 passed"
+        container.logs.side_effect = lambda stdout=True, stderr=True, **_: b"1 passed"
 
         sandbox = SandboxRunner()
         result = sandbox.run_tests(
@@ -119,7 +126,7 @@ class TestRunTests:
     def test_run_tests_failure(self, patched_client):
         _client, container, _ = patched_client
         container.wait.return_value = {"StatusCode": 1}
-        container.logs.return_value = b"AssertionError: boom"
+        container.logs.side_effect = lambda stdout=True, stderr=True, **_: b"AssertionError: boom"
 
         sandbox = SandboxRunner()
         result = sandbox.run_tests(

@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import secrets
+import threading
 
 from fastapi import Depends, FastAPI, Security, WebSocket, WebSocketDisconnect
 from fastapi.security import APIKeyHeader
@@ -51,35 +52,55 @@ def _tool_names() -> list[str]:
 _intent_engine: IntentEngine | None = None
 _skill_writer: SkillWriter | None = None
 _rag_manager: RagManager | None = None
+_agent: object | None = None
+_singleton_lock = threading.Lock()
 
 
 def get_intent_engine() -> IntentEngine:
-    """Return the singleton IntentEngine, initializing lazily."""
+    """Return the singleton IntentEngine, initializing lazily (thread-safe)."""
     global _intent_engine
     if _intent_engine is None:
-        _intent_engine = IntentEngine(registry=registry)
+        with _singleton_lock:
+            if _intent_engine is None:
+                _intent_engine = IntentEngine(registry=registry)
     return _intent_engine
 
 
-def _get_intent_engine() -> IntentEngine:
-    """Internal accessor (same as get_intent_engine)."""
-    return get_intent_engine()
-
-
 def get_skill_writer() -> SkillWriter:
-    """Return the singleton SkillWriter."""
+    """Return the singleton SkillWriter (thread-safe)."""
     global _skill_writer
     if _skill_writer is None:
-        _skill_writer = SkillWriter()
+        with _singleton_lock:
+            if _skill_writer is None:
+                _skill_writer = SkillWriter()
     return _skill_writer
 
 
 def get_rag_manager() -> RagManager:
-    """Return the singleton RagManager."""
+    """Return the singleton RagManager (thread-safe)."""
     global _rag_manager
     if _rag_manager is None:
-        _rag_manager = RagManager()
+        with _singleton_lock:
+            if _rag_manager is None:
+                _rag_manager = RagManager()
     return _rag_manager
+
+
+def get_agent():
+    """Return the cached Agno Agent, creating it lazily on first use (thread-safe)."""
+    global _agent
+    if _agent is None:
+        with _singleton_lock:
+            if _agent is None:
+                _agent = create_agent()
+    return _agent
+
+
+def invalidate_agent_cache() -> None:
+    """Drop the cached Agent so the next get_agent() rebuilds it (after reload)."""
+    global _agent
+    with _singleton_lock:
+        _agent = None
 
 
 def create_agent():  # pragma: no cover — lazy import, needs LLM backend
@@ -118,6 +139,7 @@ async def health() -> dict:
 async def reload_skills() -> dict:
     """Hot-reload skills from the skills directory."""
     registry.get_tools()
+    invalidate_agent_cache()
     return {"status": "success", "loaded_tools": _tool_names()}
 
 
@@ -142,9 +164,9 @@ async def ws_chat(websocket: WebSocket) -> None:
     try:
         while True:
             data = await websocket.receive_text()
-            # Create agent lazily and stream response
+            # Use cached agent; cache is invalidated on reload-skills.
             try:
-                agent = create_agent()
+                agent = get_agent()
                 response = agent.run(data)
                 content = response.content if hasattr(response, "content") else str(response)
                 await websocket.send_text(json.dumps({"type": "response", "content": content}))

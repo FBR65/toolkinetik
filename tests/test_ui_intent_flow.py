@@ -9,13 +9,11 @@ Verifies that the frontend:
 
 from __future__ import annotations
 
-from unittest.mock import AsyncMock, MagicMock, patch
-import asyncio
-
 
 def _reload_ui():
     """Reload ui module for fresh imports."""
     import importlib
+
     import nicegui  # noqa: F401
     return importlib.reload(importlib.import_module("toolkinetik.ui"))
 
