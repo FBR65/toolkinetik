@@ -2,10 +2,7 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from unittest.mock import MagicMock, patch
-
-import pytest
 
 from toolkinetik.coding_agent import SkillSpec
 from toolkinetik.safety import SafetyReport

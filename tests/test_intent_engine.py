@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from toolkinetik.coding_agent import SkillSpec
 from toolkinetik.intent import IntentEngine
 

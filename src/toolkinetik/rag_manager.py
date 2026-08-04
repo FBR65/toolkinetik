@@ -27,8 +27,8 @@ class RagManager:
         if self._initialized:
             return
         try:
-            import pyarrow as pa
             import lancedb
+            import pyarrow as pa
             from sentence_transformers import SentenceTransformer
 
             self._embedder = SentenceTransformer("sentence-transformers/all-MiniLLM-L6-v2")

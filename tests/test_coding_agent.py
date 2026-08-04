@@ -398,7 +398,6 @@ def test_ensure_coding_cli_raises_on_install_failure():
 
 def test_coding_agent_empty_primary_auto_detects():
     """CodingAgent without a primary CLI auto-detects via ensure_coding_cli."""
-    from toolkinetik.coding_agent import ensure_coding_cli
     with patch("toolkinetik.coding_agent.ensure_coding_cli", return_value="codex"):
         agent = CodingAgent()
         assert agent.cli_primary == "codex"

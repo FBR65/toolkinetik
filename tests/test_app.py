@@ -86,8 +86,9 @@ def test_reload_skills_returns_tool_list() -> None:
 
 def test_api_key_uses_constant_time_compare() -> None:
     """API-key verification must use a timing-safe comparison (B2)."""
-    from toolkinetik.app import verify_api_key
     from fastapi import HTTPException
+
+    from toolkinetik.app import verify_api_key
 
     with patch("toolkinetik.app.secrets.compare_digest", wraps=__import__("secrets").compare_digest) as mock:
         with pytest.raises(HTTPException) as excinfo:
@@ -107,21 +108,19 @@ def test_websocket_rejects_invalid_key() -> None:
     """WebSocket chat with an invalid api_key must close (policy violation)."""
     from starlette.websockets import WebSocketDisconnect
 
-    with TestClient(app) as client:
-        with pytest.raises(WebSocketDisconnect) as excinfo:
-            with client.websocket_connect("/ws/chat?api_key=wrong-key"):
-                pass
-        assert excinfo.value.code == 1008
+    with TestClient(app) as client, pytest.raises(WebSocketDisconnect) as excinfo, \
+         client.websocket_connect("/ws/chat?api_key=wrong-key"):
+        pass
+    assert excinfo.value.code == 1008
 
 
 def test_websocket_accepts_valid_key() -> None:
     """WebSocket chat with a valid api_key must connect and reply."""
-    with TestClient(app) as client:
-        with client.websocket_connect("/ws/chat?api_key=test-key-12345") as ws:
-            ws.send_text("hello")
-            received = ws.receive_json()
-            assert isinstance(received, dict)
-            assert "content" in received
+    with TestClient(app) as client, client.websocket_connect("/ws/chat?api_key=test-key-12345") as ws:
+        ws.send_text("hello")
+        received = ws.receive_json()
+        assert isinstance(received, dict)
+        assert "content" in received
 
 
 def test_create_agent_uses_openaichat_model() -> None:

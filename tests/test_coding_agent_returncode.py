@@ -27,23 +27,22 @@ class TestCallCliReturnCode:
     def test_nonzero_returncode_raises_runtime_error(self):
         agent = CodingAgent(cli_primary="claude")
         with patch("toolkinetik.coding_agent.subprocess.run",
-                   return_value=_mock_completed(1, stdout="", stderr="boom")):
-            with pytest.raises(RuntimeError, match="boom"):
-                agent._call_cli("prompt", "claude")
+                   return_value=_mock_completed(1, stdout="", stderr="boom")), \
+             pytest.raises(RuntimeError, match="boom"):
+            agent._call_cli("prompt", "claude")
 
     def test_nonzero_returncode_includes_stderr_in_message(self):
         agent = CodingAgent(cli_primary="claude")
         with patch("toolkinetik.coding_agent.subprocess.run",
-                   return_value=_mock_completed(2, stdout="", stderr="compile error here")):
-            with pytest.raises(RuntimeError, match="compile error here"):
-                agent._call_cli("prompt", "claude")
+                   return_value=_mock_completed(2, stdout="", stderr="compile error here")), \
+             pytest.raises(RuntimeError, match="compile error here"):
+            agent._call_cli("prompt", "claude")
 
     def test_zero_returncode_empty_stdout_raises(self):
         agent = CodingAgent(cli_primary="claude")
         with patch("toolkinetik.coding_agent.subprocess.run",
-                   return_value=_mock_completed(0, stdout="", stderr="")):
-            with pytest.raises(ValueError, match="empty"):
-                agent._call_cli("prompt", "claude")
+                   return_value=_mock_completed(0, stdout="", stderr="")), pytest.raises(ValueError, match="empty"):
+            agent._call_cli("prompt", "claude")
 
     def test_zero_returncode_nonempty_stdout_returns_stdout(self):
         agent = CodingAgent(cli_primary="claude")
