@@ -148,8 +148,8 @@ uv run pytest tests/ --randomly-seed=0
 
 ## Zusammenfassung (Final)
 
-- **7 neue Test-Dateien** mit **38 neuen Tests**  
-- **216 Tests passieren** (178 ursprünglich + 38 neu)  
+- **7 neue Test-Dateien** mit **45 neuen Tests**  
+- **223 Tests passieren** (178 ursprünglich + 45 neu)  
 - **5/5 manuelle Mutanten getötet** (+ 1 dokumentierter Survivor)  
 - **0 neue Lint/Type-Fehler**  
 - **100% Zeilenabdeckung** für IntentEngine (Kern-Komponente)  
