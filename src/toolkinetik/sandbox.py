@@ -78,7 +78,10 @@ class SandboxRunner:
         access is needed during test execution.  The image is built on first
         use from ``python:3.12-slim`` + ``pip install pytest``.
         """
-        test_image = self._ensure_test_image()
+        try:
+            test_image = self._ensure_test_image()
+        except RuntimeError as exc:
+            return {"exit_code": -1, "stdout": "", "stderr": str(exc)}
         tmpdir = Path(tempfile.mkdtemp(prefix="sandbox_tests_"))
         try:
             (tmpdir / "skill.py").write_text(skill_code)
@@ -107,7 +110,8 @@ class SandboxRunner:
         """Build (once) and return the custom test image tag.
 
         The image is built from python:3.12-slim with pytest pre-installed,
-        so that run_tests can execute with network_mode="none".
+        so that run_tests can execute with network_mode="none".  Raises
+        RuntimeError if the build fails (no silent fallback).
         """
         if self._test_image_built:
             return self._TEST_IMAGE_TAG
@@ -132,10 +136,10 @@ class SandboxRunner:
                 rm=True,
             )
             self._test_image_built = True
-        except Exception:
-            # If build fails (e.g. no Docker daemon in tests), fall back to
-            # the base image — run_tests will use pip install with network.
-            pass
+        except Exception as exc:
+            raise RuntimeError(
+                f"sandbox image build failed: {exc}"
+            ) from exc
         return self._TEST_IMAGE_TAG
 
     def _exec_container(
