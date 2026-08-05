@@ -79,3 +79,77 @@ class TestWebSocketIntegration:
         assert chat_input.value == ""
         # WebSocket was called
         mock_ws_connect.assert_called_once()
+
+    @patch("websockets.connect")
+    @patch("nicegui.ui")
+    def test_send_message_handles_status_update(self, mock_nicegui_ui, mock_ws_connect):
+        """send_message handles status-type messages from the server."""
+        mod = _reload_ui()
+        mod.reset_status()
+
+        chat_input = MagicMock()
+        chat_input.value = "test"
+
+        # Capture the status after the status message is processed
+        captured_status = []
+        original_set = mod.set_intent_phase
+
+        def capture_phase(phase):
+            original_set(phase)
+            captured_status.append(mod._agent_status)
+
+        mod.set_intent_phase = capture_phase
+
+        mock_session = AsyncMock()
+        mock_ws_connect.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        # First recv: status message, second recv: response
+        mock_session.recv = AsyncMock(side_effect=[
+            '{"type": "status", "phase": "create_skill", "message": "Creating..."}',
+            '{"type": "response", "content": "Done"}',
+        ])
+
+        mock_container = MagicMock()
+        import asyncio
+        asyncio.get_event_loop().run_until_complete(
+            mod.send_message(chat_input, mock_container)
+        )
+        # The create_skill phase should have been set at some point
+        assert any("Skill" in s or "Erstelle" in s for s in captured_status), \
+            f"expected create_skill status in {captured_status}"
+
+    @patch("websockets.connect")
+    @patch("nicegui.ui")
+    def test_send_message_handles_error_response(self, mock_nicegui_ui, mock_ws_connect):
+        """send_message handles error-type messages from the server."""
+        mod = _reload_ui()
+
+        chat_input = MagicMock()
+        chat_input.value = "test"
+
+        mock_session = AsyncMock()
+        mock_ws_connect.return_value.__aenter__ = AsyncMock(return_value=mock_session)
+        mock_session.recv = AsyncMock(return_value='{"type": "error", "content": "LLM down"}')
+
+        mock_container = MagicMock()
+        import asyncio
+        asyncio.get_event_loop().run_until_complete(
+            mod.send_message(chat_input, mock_container)
+        )
+        # After error, status should be reset
+        assert mod._agent_status == "Bereit"
+
+    @patch("websockets.connect")
+    @patch("nicegui.ui")
+    def test_send_message_empty_input_returns_early(self, mock_nicegui_ui, mock_ws_connect):
+        """send_message with empty input returns without connecting."""
+        mod = _reload_ui()
+
+        chat_input = MagicMock()
+        chat_input.value = ""
+
+        mock_container = MagicMock()
+        import asyncio
+        asyncio.get_event_loop().run_until_complete(
+            mod.send_message(chat_input, mock_container)
+        )
+        mock_ws_connect.assert_not_called()

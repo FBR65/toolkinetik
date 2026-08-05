@@ -18,10 +18,15 @@ from toolkinetik.config import _load_or_generate_api_key
 
 @pytest.fixture
 def isolated_data_dir(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Path:
-    """Point the API-key file at a tmp data dir and clear env keys."""
+    """Point the API-key file at a tmp data dir and clear env keys.
+
+    Sets TOOLKINETIK_DEV=1 so auto-generation is allowed (these tests
+    verify the auto-gen file-permission behaviour, which is dev-mode only).
+    """
     monkeypatch.setenv("HOME", str(tmp_path))
     monkeypatch.delenv("AGNO_API_KEY", raising=False)
     monkeypatch.delenv("TOOLKINETIK_API_KEY", raising=False)
+    monkeypatch.setenv("TOOLKINETIK_DEV", "1")
     data_dir = tmp_path / "data"
     data_dir.mkdir()
     return data_dir

@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import logging
 import subprocess
+import threading
+import time
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -18,6 +20,9 @@ from toolkinetik.db import SkillStore
 from toolkinetik.registry import DynamicToolRegistry
 
 logger = logging.getLogger(__name__)
+
+# Process-global lock for git operations (prevents index.lock races).
+_git_lock = threading.Lock()
 
 
 def safe_skill_path(skills_dir: str, skill_name: str) -> Path | None:
@@ -47,6 +52,8 @@ class PromotionResult:
 
 class SkillPromoter:
     """Promote generated skills to the live registry and commit to git."""
+
+    _git_lock = _git_lock  # class-level reference for test visibility
 
     def __init__(
         self,
@@ -153,20 +160,36 @@ class SkillPromoter:
     # ------------------------------------------------------------------
 
     def _git_commit(self, skill_path: Path) -> bool:
-        """Stage and commit *skill_path* to git.  Returns False on failure."""
-        try:
-            subprocess.run(
-                ["git", "add", str(skill_path)],
-                check=False,
-                capture_output=True,
-                timeout=30,
-            )
-            proc = subprocess.run(
-                ["git", "commit", "-m", f"feat: promote skill {skill_path.stem}"],
-                check=False,
-                capture_output=True,
-                timeout=30,
-            )
-            return proc.returncode == 0
-        except Exception:
+        """Stage and commit *skill_path* to git.  Returns False on failure.
+
+        Uses a process-global lock to prevent index.lock races between
+        parallel promotions. Retries up to 3 times on index.lock errors.
+        """
+        max_retries = 3
+        backoff_s = 0.1
+        with self._git_lock:
+            for attempt in range(max_retries):
+                try:
+                    subprocess.run(
+                        ["git", "add", str(skill_path)],
+                        check=False,
+                        capture_output=True,
+                        timeout=30,
+                    )
+                    proc = subprocess.run(
+                        ["git", "commit", "-m", f"feat: promote skill {skill_path.stem}"],
+                        check=False,
+                        capture_output=True,
+                        timeout=30,
+                    )
+                    if proc.returncode == 0:
+                        return True
+                    stderr = proc.stderr or ""
+                    if "index.lock" in stderr and attempt < max_retries - 1:
+                        logger.warning("git index.lock conflict, retrying (attempt %d)", attempt + 1)
+                        time.sleep(backoff_s)
+                        continue
+                    return False
+                except Exception:
+                    return False
             return False

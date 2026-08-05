@@ -49,6 +49,8 @@ class IntentEngine:
     def __init__(self, registry: DynamicToolRegistry | None = None, llm: Any = None) -> None:
         self.registry = registry
         self._llm = llm
+        self._cache: dict[str, dict[str, Any]] = {}  # request → intent_data
+        self._cache_ttl = 300  # 5 minutes
 
     def available_tools(self) -> list[str]:
         """Return names of currently loaded skills without triggering a reload."""
@@ -67,10 +69,49 @@ class IntentEngine:
             names = []
         return names
 
+    def available_tools_with_descriptions(self) -> list[tuple[str, str]]:
+        """Return (name, description) pairs for currently loaded skills.
+
+        Uses registered_skill_descriptions for SKILL.md-based skills and
+        __doc__ for legacy Python skills. Falls back to empty description.
+        """
+        result: list[tuple[str, str]] = []
+        if self.registry is None:
+            return result
+        try:
+            tools = self.registry.registered_tools
+            if not tools:
+                tools_list = self.registry.get_tools()
+                for t in tools_list:
+                    name = getattr(t, "__name__", str(t))
+                    desc = getattr(t, "__doc__", "") or ""
+                    result.append((name, desc))
+            else:
+                descriptions = getattr(self.registry, "registered_skill_descriptions", {})
+                for t in tools.values():
+                    name = getattr(t, "__name__", str(t))
+                    desc = descriptions.get(name, getattr(t, "__doc__", "") or "")
+                    result.append((name, desc))
+        except Exception:
+            result = []
+        return result
+
     def analyze(self, user_request: str) -> SkillMatch:
         """Classify *user_request* and return a :class:`SkillMatch`."""
         tool_names = self.available_tools()
-        intent_data = self._ask_llm(user_request, tool_names)
+        tool_descs = self.available_tools_with_descriptions()
+
+        # Check cache (P2.2) — same request within TTL reuses result
+        import time
+        cache_key = user_request
+        cached = self._cache.get(cache_key)
+        if cached and time.monotonic() - cached.get("_ts", 0) < self._cache_ttl:
+            intent_data = cached
+        else:
+            intent_data = self._ask_llm(user_request, tool_names, tool_descs)
+            intent_data["_ts"] = time.monotonic()
+            self._cache[cache_key] = intent_data
+
         intent = intent_data.get("intent", "chat")
 
         valid_intents = {"execute_skill", "create_skill", "rag_search", "chat"}
@@ -104,7 +145,7 @@ class IntentEngine:
             )
         return SkillMatch(action="chat", tool_names=tool_names)
 
-    def _ask_llm(self, user_request: str, tool_names: list[str]) -> dict[str, Any]:
+    def _ask_llm(self, user_request: str, tool_names: list[str], tool_descs: list[tuple[str, str]] | None = None) -> dict[str, Any]:
         """Call the LLM to classify the request.
 
         In production this sends the request + tool list to the OpenAI-compatible
@@ -112,7 +153,7 @@ class IntentEngine:
         """
         if self._llm is None:
             return {"intent": "chat"}
-        prompt = self._build_prompt(user_request, tool_names)
+        prompt = self._build_prompt(user_request, tool_names, tool_descs)
         from toolkinetik.config import get_settings
         try:
             response = self._llm.chat.completions.create(
@@ -126,9 +167,19 @@ class IntentEngine:
             logger.exception("LLM classify failed; degrading to chat intent")
             return {"intent": "chat"}
 
-    def _build_prompt(self, user_request: str, tool_names: list[str]) -> str:
-        """Build the LLM classification prompt."""
-        tools_str = "\n".join(f"  - {t}" for t in tool_names) or "  (none)"
+    def _build_prompt(self, user_request: str, tool_names: list[str], tool_descs: list[tuple[str, str]] | None = None) -> str:
+        """Build the LLM classification prompt.
+
+        When tool_descs is available, includes skill descriptions for better
+        classification. Otherwise falls back to tool names only.
+        """
+        if tool_descs:
+            tools_str = "\n".join(
+                f"  - {name}: {desc}" if desc else f"  - {name}"
+                for name, desc in tool_descs
+            ) or "  (none)"
+        else:
+            tools_str = "\n".join(f"  - {t}" for t in tool_names) or "  (none)"
         return f"""
 You are an intent classifier for a self-extending agent system called ToolKinetik.
 

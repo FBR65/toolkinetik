@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import sqlite3
+from contextlib import contextmanager
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -16,13 +17,30 @@ class SkillStore:
         Path(db_path).parent.mkdir(parents=True, exist_ok=True)
         self._init_schema()
 
-    def _connect(self) -> sqlite3.Connection:
+    @contextmanager
+    def _connect(self):
+        """Open a connection that is closed on exit (fixes ResourceWarnings).
+
+        sqlite3.Connection's own __enter__/__exit__ only manages the
+        transaction (commit/rollback), it does NOT close the connection.
+        This contextmanager ensures the connection is closed.
+        """
         conn = sqlite3.connect(self.db_path)
         conn.row_factory = sqlite3.Row
-        return conn
+        try:
+            yield conn
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
 
     def _init_schema(self) -> None:
         with self._connect() as conn:
+            # Enable WAL mode for concurrent write safety (P1.4).
+            conn.execute("PRAGMA journal_mode=WAL")
+            conn.execute("PRAGMA busy_timeout=5000")  # 5s timeout for locked DB
             conn.execute(
                 """
                 CREATE TABLE IF NOT EXISTS skills (
@@ -40,7 +58,22 @@ class SkillStore:
                 )
                 """
             )
-            conn.commit()
+            # Schema version tracking (P2.4)
+            conn.execute(
+                """
+                CREATE TABLE IF NOT EXISTS schema_version (
+                    version INTEGER PRIMARY KEY,
+                    applied_at TEXT NOT NULL
+                )
+                """
+            )
+            # Initialize with version 1 if empty
+            count = conn.execute("SELECT COUNT(*) FROM schema_version").fetchone()[0]
+            if count == 0:
+                conn.execute(
+                    "INSERT INTO schema_version (version, applied_at) VALUES (1, ?)",
+                    (self._now(),),
+                )
 
     @staticmethod
     def _now() -> str:
@@ -81,7 +114,6 @@ class SkillStore:
                 (name, module, function, description, signature,
                  version, created_by, git_commit, now, now),
             )
-            conn.commit()
 
     def get_skill(self, name: str) -> dict[str, Any] | None:
         """Return skill metadata dict or None if not found."""
@@ -106,7 +138,6 @@ class SkillStore:
                 "UPDATE skills SET version = ?, updated_at = ? WHERE name = ?",
                 (version, self._now(), name),
             )
-            conn.commit()
 
     def delete_skill(self, name: str) -> None:
         """Soft-delete a skill by setting status='deleted'."""
@@ -115,4 +146,3 @@ class SkillStore:
                 "UPDATE skills SET status = 'deleted', updated_at = ? WHERE name = ?",
                 (self._now(), name),
             )
-            conn.commit()

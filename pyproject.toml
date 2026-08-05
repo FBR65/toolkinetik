@@ -9,16 +9,17 @@ authors = [{ name = "ToolKinetik Team" }]
 
 dependencies = [
     "agno>=2.8.6,<3.0",
-    "fastapi",
-    "uvicorn",
-    "nicegui",
-    "httpx",
-    "websockets",
-    "docker",
-    "typer",
-    "rich",
-    "openai",
-    "pydantic-settings",
+    "fastapi>=0.115,<1.0",
+    "uvicorn>=0.30,<1.0",
+    "nicegui>=2.0,<3.0",
+    "httpx>=0.27,<1.0",
+    "websockets>=13,<14",
+    "docker>=7.0,<8.0",
+    "typer>=0.12,<1.0",
+    "rich>=13,<14",
+    "openai>=1.40,<2.0",
+    "pydantic-settings>=2.4,<3.0",
+    "pyyaml>=6.0,<7.0",
 ]
 
 [project.optional-dependencies]
@@ -28,6 +29,7 @@ dev = [
     "mypy",
     "pytest-cov>=7.1.0",
     "pytest-randomly>=4.1.0",
+    "hypothesis>=6.100",
 ]
 rag = [
     "lancedb",
@@ -44,10 +46,18 @@ packages = ["src/toolkinetik"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["src"]
+markers = [
+    "integration: tests requiring real infrastructure (Docker, uvx, LLM, LanceDB)",
+    "docker: tests requiring a real Docker daemon",
+    "wigolo: tests requiring the wigolo MCP server via uvx",
+    "llm: tests requiring a real LLM endpoint (set TOOLKINETIK_TEST_LLM_BASE)",
+    "ui: tests requiring a browser (Playwright/Selenium)",
+]
 
 [tool.ruff]
 target-version = "py312"
 line-length = 120
+exclude = ["skills/"]  # vendored skill scripts — not our code, separate lint standards
 
 [tool.ruff.lint]
 ignore = [
@@ -63,4 +73,6 @@ python_version = "3.12"
 ignore_missing_imports = true
 
 [dependency-groups]
-dev = []
+dev = [
+    "playwright>=1.62.0",
+]

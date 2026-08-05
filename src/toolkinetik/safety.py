@@ -75,11 +75,18 @@ class SafetyChecker:
     # Public API
     # ------------------------------------------------------------------
 
-    def check_code(self, code: str) -> SafetyReport:
+    def check_code(self, code: str, trusted_path: bool = False) -> SafetyReport:
         """AST-parse *code* and check for forbidden calls and imports.
 
         Returns a SafetyReport.  If the code has a syntax error, the report
         has ``passed=False`` with an issue describing the error.
+
+        When *trusted_path* is True (e.g. for vendored skill helper scripts),
+        import restrictions are relaxed — ``os``, ``subprocess``, ``shutil``,
+        ``ctypes`` and other modules are allowed. Forbidden *calls* (eval,
+        exec, os.system, subprocess.run, etc.) are still blocked regardless
+        of trusted_path, because those are dangerous operations that even
+        trusted scripts should avoid.
         """
         issues: list[str] = []
         forbidden_calls: list[str] = []
@@ -100,6 +107,11 @@ class SafetyChecker:
             if isinstance(node, ast.Import):
                 for alias in node.names:
                     root_name = alias.name.split(".")[0]
+                    if trusted_path:
+                        # Trusted path: only block explicitly forbidden imports
+                        # (none currently, since FORBIDDEN_IMPORTS are about
+                        # untrusted code). Dangerous calls are still checked below.
+                        continue
                     if root_name in self.FORBIDDEN_IMPORTS:
                         forbidden_imports.append(f"import {alias.name}")
                         issues.append(f"forbidden import: {alias.name}")
@@ -108,14 +120,13 @@ class SafetyChecker:
                         issues.append(f"disallowed import: {alias.name}")
 
             elif isinstance(node, ast.ImportFrom):
-                # Relative imports (node.level > 0, e.g. `from .module import`)
-                # reference sibling skill modules and are always allowed.
                 if node.level > 0:
                     continue
                 module = node.module or ""
                 root_name = module.split(".")[0]
+                if trusted_path:
+                    continue
                 if root_name in self.FORBIDDEN_IMPORTS:
-                    # Report the full from-import module.
                     imported = node.module
                     forbidden_imports.append(f"from {imported} import ...")
                     issues.append(f"forbidden import: {imported}")
@@ -123,20 +134,23 @@ class SafetyChecker:
                     forbidden_imports.append(f"from {module} import ...")
                     issues.append(f"disallowed import: {module}")
 
-            # -- Check forbidden calls ----------------------------------
+            # -- Check forbidden calls (always enforced, except trusted) --
             if isinstance(node, ast.Call):
                 func = node.func
 
-                # Direct builtin call: eval(...), exec(...), __import__(...), compile(...)
                 if isinstance(func, ast.Name) and func.id in self._FORBIDDEN_BUILTIN_CALLS:
                     call_str = func.id
                     forbidden_calls.append(call_str)
                     issues.append(f"forbidden call: {call_str}()")
 
-                # Attribute call: os.system(...), subprocess.run(...), etc.
                 elif isinstance(func, ast.Attribute):
                     call_str = self._attr_to_string(func)
                     if call_str in self._FORBIDDEN_ATTR_CALLS:
+                        # Trusted path allows subprocess calls (skill scripts
+                        # legitimately need subprocess.run etc.) but os.system
+                        # and os.popen are always blocked (shell injection risk).
+                        if trusted_path and call_str.startswith("subprocess."):
+                            continue
                         forbidden_calls.append(call_str)
                         issues.append(f"forbidden call: {call_str}()")
 

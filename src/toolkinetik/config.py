@@ -15,8 +15,21 @@ def _api_key_file() -> Path:
     return Path("data").resolve() / ".api_key"
 
 
+def _is_dev_mode() -> bool:
+    """Return True if TOOLKINETIK_DEV env var is set to a truthy value."""
+    return os.environ.get("TOOLKINETIK_DEV", "").strip() in {"1", "true", "True", "TRUE", "yes"}
+
+
 def _load_or_generate_api_key() -> str:
-    """Load the API key from the persisted file, or generate and persist a new one."""
+    """Load the API key from env or persisted file.
+
+    In production (TOOLKINETIK_DEV not set): requires AGNO_API_KEY or
+    TOOLKINETIK_API_KEY env var, or an existing persisted key file.
+    Raises RuntimeError if none are available — never auto-generates.
+
+    In dev mode (TOOLKINETIK_DEV=1): auto-generates and persists a new key
+    if no env var or file is available.
+    """
     # Check environment first — explicit env var always wins.
     env_key = os.environ.get("AGNO_API_KEY", "") or os.environ.get("TOOLKINETIK_API_KEY", "")
     if env_key:
@@ -37,7 +50,15 @@ def _load_or_generate_api_key() -> str:
     except OSError:
         pass
 
-    # Generate a new key and persist it.
+    # Production mode: refuse to auto-generate.
+    if not _is_dev_mode():
+        raise RuntimeError(
+            "AGNO_API_KEY is required in production. "
+            "Set it as an environment variable, or set TOOLKINETIK_DEV=1 "
+            "to allow auto-generation for development."
+        )
+
+    # Dev mode: generate a new key and persist it.
     new_key = secrets.token_urlsafe(32)
     try:
         key_file.parent.mkdir(parents=True, exist_ok=True)

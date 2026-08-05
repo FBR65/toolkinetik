@@ -240,3 +240,5 @@ Services:
 ## License
 
 MIT
+
+@KnockOutEZ/wigolo is under AGPLV3 License

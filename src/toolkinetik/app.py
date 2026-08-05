@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import secrets
 import threading
+from collections import defaultdict
 
 from fastapi import Depends, FastAPI, Security, WebSocket, WebSocketDisconnect
 from fastapi.security import APIKeyHeader
@@ -22,12 +23,50 @@ from toolkinetik.rag_manager import RagManager
 from toolkinetik.registry import DynamicToolRegistry
 from toolkinetik.skill_writer import SkillWriter
 
+# --- WebSocket connection tracking (P2.3) ---
+_ws_connections: dict[str, int] = defaultdict(int)
+_ws_max_per_key: int = 5
+_ws_conn_lock = threading.Lock()
+
+
+def get_max_ws_connections() -> int:
+    return _ws_max_per_key
+
+
+def set_max_ws_connections(limit: int) -> None:
+    global _ws_max_per_key
+    _ws_max_per_key = limit
+
+
+def get_active_ws_connections(api_key: str) -> int:
+    return _ws_connections.get(api_key, 0)
+
+
+def increment_ws_connection(api_key: str) -> None:
+    with _ws_conn_lock:
+        _ws_connections[api_key] += 1
+
+
+def decrement_ws_connection(api_key: str) -> None:
+    with _ws_conn_lock:
+        _ws_connections[api_key] = max(0, _ws_connections.get(api_key, 0) - 1)
+
+
+def reset_ws_connections() -> None:
+    with _ws_conn_lock:
+        _ws_connections.clear()
+
 # --- Settings & registry --------------------------------------------------
 settings = get_settings()
 registry = DynamicToolRegistry(settings.SKILLS_DIR)
 
 # --- FastAPI app -----------------------------------------------------------
 app = FastAPI(title="ToolKinetik", version="0.1.0")
+
+# Rate limiting middleware (P1.3)
+from toolkinetik.rate_limiter import rate_limit_middleware
+
+app.middleware("http")(rate_limit_middleware)
 
 # API-Key security scheme
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
@@ -135,6 +174,23 @@ async def health() -> dict:
     return {"status": "healthy"}
 
 
+@app.get("/api/health/deep")
+async def deep_health() -> dict:
+    """Deep health check — checks Docker, LLM, and RAG subsystems.
+
+    No auth required (like /api/health) so load balancers can probe it.
+    """
+    from toolkinetik.health import deep_health_check
+    return deep_health_check()
+
+
+@app.get("/metrics")
+async def metrics() -> str:
+    """Prometheus-format metrics endpoint (P1.5)."""
+    from toolkinetik.metrics import get_metrics_text
+    return get_metrics_text()
+
+
 @app.post("/api/reload-skills", dependencies=[Depends(verify_api_key)])
 async def reload_skills() -> dict:
     """Hot-reload skills from the skills directory."""
@@ -160,6 +216,12 @@ async def ws_chat(websocket: WebSocket) -> None:
         await websocket.close(code=1008)  # policy violation
         return
 
+    # Connection limit per API key (P2.3)
+    if get_active_ws_connections(api_key) >= _ws_max_per_key:
+        await websocket.close(code=1008)  # policy violation
+        return
+
+    increment_ws_connection(api_key)
     await websocket.accept()
     try:
         while True:
@@ -173,4 +235,6 @@ async def ws_chat(websocket: WebSocket) -> None:
             except Exception as exc:  # pragma: no cover — needs LLM
                 await websocket.send_text(json.dumps({"type": "error", "content": str(exc)}))
     except WebSocketDisconnect:
-        return
+        pass
+    finally:
+        decrement_ws_connection(api_key)

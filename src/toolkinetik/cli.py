@@ -96,18 +96,56 @@ def skills_create(
     name: str = typer.Argument(..., help="Name of the new skill"),
     description: str = typer.Argument(..., help="Description of what the skill does"),
 ) -> None:
-    """Request a new skill (prints the request for now)."""
-    console.print("[bold cyan]Skill creation request:[/]")
+    """Request a new skill via the SkillWriter pipeline.
+
+    Triggers the full create-test-promote loop: research → codegen →
+    safety → TDD → promote.
+    """
+    from toolkinetik.skill_writer import SkillWriter
+
+    console.print("[bold cyan]Creating skill:[/]")
     console.print(f"  Name:        {name}")
     console.print(f"  Description: {description}")
-    console.print("[dim](Not yet implemented — this will trigger the coding agent.)[/]")
+    console.print("[dim]Running SkillWriter pipeline (research → codegen → TDD → promote)...[/]")
+
+    writer = SkillWriter()
+    result = writer.write_skill(f"{description} (skill name: {name})")
+
+    if result.success:
+        console.print(f"[bold green]✓ Skill '{name}' created and promoted[/]")
+        if result.promotion:
+            console.print(f"  Path: {result.promotion.skill_path}")
+    else:
+        console.print(f"[bold red]✗ Skill creation failed: {result.error}[/]")
+        if result.safety_issues:
+            console.print(f"  Safety issues: {result.safety_issues}")
+        raise typer.Exit(code=1)
 
 
 @sandbox_app.command("status")
 def sandbox_status() -> None:
-    """Show sandbox status."""
+    """Show sandbox status — checks Docker daemon availability."""
+    import shutil as _shutil
+
     console.print("[bold blue]Sandbox Status[/]")
-    console.print(f"  Docker: configured (image: {settings.SANDBOX_IMAGE})")
+    console.print(f"  Image: {settings.SANDBOX_IMAGE}")
+
+    docker_cli = _shutil.which("docker")
+    if not docker_cli:
+        console.print("  [bold red]✗ Docker CLI not found[/]")
+        raise typer.Exit(code=1)
+
+    try:
+        import docker
+        client = docker.from_env()
+        client.ping()
+        console.print("  [bold green]✓ Docker daemon reachable[/]")
+        info = client.info()
+        console.print(f"  Containers: {info.get('Containers', 'unknown')}")
+        console.print(f"  Docker version: {info.get('ServerVersion', 'unknown')}")
+    except Exception as exc:
+        console.print(f"  [bold red]✗ Docker daemon unreachable: {exc}[/]")
+        raise typer.Exit(code=1) from exc
 
 
 if __name__ == "__main__":  # pragma: no cover
