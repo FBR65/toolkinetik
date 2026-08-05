@@ -164,10 +164,6 @@ toolkinetik/
 - Docker (for sandbox execution)
 - wigolo (installed automatically via `uvx` when needed)
 
-- Python 3.12+
-- [uv](https://docs.astral.sh/uv/) package manager
-- Docker (for sandbox execution)
-
 ### Installation
 
 ```bash

@@ -67,3 +67,25 @@ print(f"pid={os.getpid()}")
         current_pid = os.getpid()
         assert f"pid={current_pid}" not in result["stdout"], \
             "skill ran in the main process, not isolated"
+
+    def test_run_function_with_single_quote_in_arg(self, runner: SkillRunner):
+        """run_function must handle args containing single quotes without syntax errors.
+
+        Regression: json.dumps produces unescaped single quotes inside a
+        Python single-quoted string literal, causing SyntaxError.
+        """
+        code = "def echo(text):\n    return text\n"
+        result = runner.run_function(code, "echo", "it's working")
+        assert result["exit_code"] == 0
+
+    def test_run_function_with_double_quote_in_arg(self, runner: SkillRunner):
+        """run_function must handle args containing double quotes."""
+        code = "def echo(text):\n    return text\n"
+        result = runner.run_function(code, "echo", 'he said "hi"')
+        assert result["exit_code"] == 0
+
+    def test_run_function_with_keyword_args(self, runner: SkillRunner):
+        """run_function passes keyword arguments correctly."""
+        code = "def greet(greeting, name):\n    return f'{greeting}, {name}'\n"
+        result = runner.run_function(code, "greet", greeting="Hello", name="World")
+        assert result["exit_code"] == 0

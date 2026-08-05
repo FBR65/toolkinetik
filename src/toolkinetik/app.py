@@ -14,12 +14,13 @@ import secrets
 import threading
 from collections import defaultdict
 
-from fastapi import Depends, FastAPI, Security, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, HTTPException, Security, WebSocket, WebSocketDisconnect
 from fastapi.security import APIKeyHeader
 
 from toolkinetik.config import get_settings
 from toolkinetik.intent import IntentEngine
 from toolkinetik.rag_manager import RagManager
+from toolkinetik.rate_limiter import rate_limit_middleware
 from toolkinetik.registry import DynamicToolRegistry
 from toolkinetik.skill_writer import SkillWriter
 
@@ -64,8 +65,6 @@ registry = DynamicToolRegistry(settings.SKILLS_DIR)
 app = FastAPI(title="ToolKinetik", version="0.1.0")
 
 # Rate limiting middleware (P1.3)
-from toolkinetik.rate_limiter import rate_limit_middleware
-
 app.middleware("http")(rate_limit_middleware)
 
 # API-Key security scheme
@@ -75,8 +74,6 @@ api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 def verify_api_key(api_key: str | None = Security(api_key_header)) -> str:
     """Dependency that validates the X-API-Key header."""
     if api_key is None or not secrets.compare_digest(api_key, settings.AGNO_API_KEY):
-        from fastapi import HTTPException
-
         raise HTTPException(status_code=403, detail="Invalid or missing API key")
     return api_key
 
@@ -142,7 +139,7 @@ def invalidate_agent_cache() -> None:
         _agent = None
 
 
-def create_agent():  # pragma: no cover — lazy import, needs LLM backend
+def create_agent():
     """Create an Agno Agent with IntentEngine + SkillWriter wired in.
 
     The agent gets:
@@ -217,7 +214,7 @@ async def ws_chat(websocket: WebSocket) -> None:
         return
 
     # Connection limit per API key (P2.3)
-    if get_active_ws_connections(api_key) >= _ws_max_per_key:
+    if get_active_ws_connections(api_key) >= get_max_ws_connections():
         await websocket.close(code=1008)  # policy violation
         return
 

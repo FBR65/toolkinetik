@@ -14,7 +14,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-from toolkinetik.coding_agent import SkillSpec
+from toolkinetik.coding_agent import CodingAgent, SkillSpec
 from toolkinetik.config import get_settings
 from toolkinetik.db import SkillStore
 from toolkinetik.promotion import PromotionResult, SkillPromoter
@@ -23,6 +23,22 @@ from toolkinetik.safety import SafetyChecker, SafetyReport
 from toolkinetik.tdd_loop import TDDLoop, TDDResult
 
 logger = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Revision adapter — bridges SkillWriter._revise_code to TDDLoop's
+# CodingAgent.revise_code interface.
+# ---------------------------------------------------------------------------
+
+
+class _RevisionAdapter(CodingAgent):
+    """Minimal CodingAgent facade: only ``revise_code`` is used by TDDLoop."""
+
+    def __init__(self, writer: SkillWriter) -> None:
+        self._writer = writer
+
+    def revise_code(self, code: str, error_trace: str, spec: SkillSpec) -> str | None:
+        return self._writer._revise_code(code, error_trace)
 
 
 @dataclass
@@ -100,7 +116,7 @@ class SkillWriter:
                 error="Safety check failed: " + "; ".join(safety.issues),
             )
 
-        tdd = self._run_tdd(code, tests)
+        tdd = self._run_tdd(code, tests, spec)
         if not tdd.success:
             return SkillWriterResult(
                 success=False,
@@ -232,7 +248,7 @@ class SkillWriter:
     # 5. TDD Loop (Docker Sandbox)
     # ------------------------------------------------------------------
 
-    def _run_tdd(self, code: str, tests: str) -> TDDResult:
+    def _run_tdd(self, code: str, tests: str, spec: SkillSpec | None = None) -> TDDResult:
         """Run tests via TDDLoop, delegating retries and safety to it.
 
         Uses the Docker SandboxRunner if available, otherwise local fallback.
@@ -242,22 +258,13 @@ class SkillWriter:
         if self._sandbox is None:
             return self._run_local_tdd(code, tests)
 
-        # Build a CodingAgent-like adapter that delegates to _revise_code.
-        writer = self
-
-        class _RevisionAdapter:
-            """Minimal CodingAgent facade: only revise_code is used by TDDLoop."""
-
-            def revise_code(self, code: str, error_trace: str, spec: SkillSpec) -> str | None:
-                return writer._revise_code(code, error_trace)
-
         loop = TDDLoop(
             sandbox=self._sandbox,
             max_retries=self._max_retries,
-            coding_agent=_RevisionAdapter() if self._llm is not None else None,  # type: ignore[arg-type]
+            coding_agent=_RevisionAdapter(self) if self._llm is not None else None,
         )
-        spec = SkillSpec(name="anonymous", description="", signature="")
-        return loop.run(spec, code, tests)
+        tdd_spec = spec if spec is not None else SkillSpec(name="anonymous", description="", signature="")
+        return loop.run(tdd_spec, code, tests)
 
     def _run_local_tdd(self, code: str, tests: str) -> TDDResult:
         """Fallback: write temp files and run pytest locally."""

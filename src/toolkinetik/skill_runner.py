@@ -64,14 +64,20 @@ class SkillRunner:
         """Execute a specific function from *code* with the given args.
 
         Writes a wrapper script that imports the function and calls it.
+        Args/kwargs are serialized as JSON via repr() to avoid string-literal
+        injection (single or double quotes in arguments must not break the
+        generated Python source).
         """
         import json
+
+        args_json = json.dumps(list(args))
+        kwargs_json = json.dumps(kwargs)
         wrapper = f"""
 import json
 {code}
 
-_args = json.loads('{json.dumps(list(args))}')
-_kwargs = json.loads('{json.dumps(kwargs)}')
+_args = json.loads({args_json!r})
+_kwargs = json.loads({kwargs_json!r})
 _result = {func_name}(*_args, **_kwargs)
 print(json.dumps({{"result": repr(_result)}}))
 """

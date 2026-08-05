@@ -64,8 +64,7 @@ class SkillPromoter:
         settings = get_settings()
         self.skills_dir = skills_dir if skills_dir is not None else str(settings.skills_path)
         self.registry = registry if registry is not None else DynamicToolRegistry(self.skills_dir)
-        self.db = db if db is not None else SkillStore(str(settings.db_full_path)
-                                                       )
+        self.db = db if db is not None else SkillStore(str(settings.db_full_path))
         # Ensure the directory exists.
         Path(self.skills_dir).mkdir(parents=True, exist_ok=True)
 

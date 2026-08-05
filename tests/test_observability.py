@@ -68,3 +68,20 @@ class TestMetricsEndpoint:
         record_skill_promote("test_skill", success=True)
         text = get_metrics_text()
         assert "skill_promote_total" in text or "toolkinetik" in text.lower()
+
+    def test_metrics_llm_call_has_model_label(self):
+        """llm_call_total uses model= label, not skill_name=."""
+        from toolkinetik.metrics import get_metrics_text, record_llm_call, reset_metrics
+        reset_metrics()
+        record_llm_call("gpt-4o", success=True)
+        text = get_metrics_text()
+        assert 'model="gpt-4o"' in text
+        assert "skill_name" not in text.split("llm_call_total")[1].split("\n")[0]
+
+    def test_metrics_skill_promote_has_skill_name_label(self):
+        """skill_promote_total uses skill_name= label."""
+        from toolkinetik.metrics import get_metrics_text, record_skill_promote, reset_metrics
+        reset_metrics()
+        record_skill_promote("my_skill", success=True)
+        text = get_metrics_text()
+        assert 'skill_name="my_skill"' in text

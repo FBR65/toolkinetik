@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -45,6 +46,8 @@ class IntentEngine:
     - rag_search:    the request needs document search (RAG)
     - chat:          normal conversation, no skill needed
     """
+
+    _VALID_INTENTS = frozenset({"execute_skill", "create_skill", "rag_search", "chat"})
 
     def __init__(self, registry: DynamicToolRegistry | None = None, llm: Any = None) -> None:
         self.registry = registry
@@ -102,7 +105,6 @@ class IntentEngine:
         tool_descs = self.available_tools_with_descriptions()
 
         # Check cache (P2.2) — same request within TTL reuses result
-        import time
         cache_key = user_request
         cached = self._cache.get(cache_key)
         if cached and time.monotonic() - cached.get("_ts", 0) < self._cache_ttl:
@@ -114,8 +116,7 @@ class IntentEngine:
 
         intent = intent_data.get("intent", "chat")
 
-        valid_intents = {"execute_skill", "create_skill", "rag_search", "chat"}
-        if intent not in valid_intents:
+        if intent not in self._VALID_INTENTS:
             logger.warning("LLM returned unknown intent %r; degrading to chat", intent)
             intent = "chat"
 

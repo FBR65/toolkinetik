@@ -15,6 +15,7 @@ import logging
 from pathlib import Path
 from typing import Any
 
+from toolkinetik.coding_agent import SkillSpec
 from toolkinetik.skill_loader import SkillInfo
 
 logger = logging.getLogger(__name__)
@@ -74,16 +75,13 @@ class SkillExecutor:
     def _delegate_to_agent(self, info: SkillInfo, prompt: str) -> str:
         """Delegate the prompt to the coding agent and return its output."""
         try:
-            # Use create_skill or a similar method from CodingAgent.
-            # Since CodingAgent is designed for code generation, we use
-            # a generic prompt-based delegation.
             result = self._coding_agent.create_skill(
-                spec=type("Spec", (), {
-                    "name": info.name,
-                    "description": info.description,
-                    "signature": f"def {info.name}(*args, **kwargs):",
-                    "test_cases": [],
-                })(),
+                spec=SkillSpec(
+                    name=info.name,
+                    description=info.description,
+                    signature=f"def {info.name}(*args, **kwargs):",
+                    test_cases=[],
+                ),
             )
             return result.code if hasattr(result, "code") else str(result)
         except Exception:

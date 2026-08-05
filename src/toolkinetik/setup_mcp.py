@@ -194,7 +194,7 @@ class WigoloMCPToolkit:
 
     def __init__(self, client: Any = None) -> None:
         self._client = client if client is not None else _WigoloClient()
-        # Fallback to stub if real client fails
+        self._stub = _StubClient()
         self._use_stub = False
 
     def research(self, query: str, context: str = "") -> dict:
@@ -211,8 +211,7 @@ class WigoloMCPToolkit:
         except Exception:
             logger.exception("wigolo research failed; falling back to stub")
             self._use_stub = True
-            stub = getattr(self._client, "_stub", _StubClient())
-            return stub.research(query, context)
+            return self._stub.research(query, context)
 
     def extract(self, url: str) -> str:
         """Extract content from a URL using wigolo's extract tool.
@@ -227,8 +226,7 @@ class WigoloMCPToolkit:
         except Exception:
             logger.exception("wigolo extract failed; falling back to stub")
             self._use_stub = True
-            stub = getattr(self._client, "_stub", _StubClient())
-            return stub.extract(url)
+            return self._stub.extract(url)
 
     @property
     def tools(self) -> list[str]:

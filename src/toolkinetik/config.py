@@ -10,9 +10,23 @@ from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
+def _project_root() -> Path:
+    """Return the project root directory, falling back to CWD.
+
+    In development and Docker the project root is discoverable from
+    ``__file__`` (``src/toolkinetik/config.py`` → 3 parents).  If the
+    resolved path does not exist (e.g. package installed to site-packages),
+    fall back to the current working directory so that ``data/`` created
+    relative to CWD still works.
+    """
+    candidate = Path(__file__).resolve().parent.parent.parent
+    return candidate if candidate.is_dir() else Path.cwd()
+
+
 def _api_key_file() -> Path:
     """Return the path to the persisted API key file."""
-    return Path("data").resolve() / ".api_key"
+    data_dir = _project_root() / "data"
+    return data_dir / ".api_key"
 
 
 def _is_dev_mode() -> bool:

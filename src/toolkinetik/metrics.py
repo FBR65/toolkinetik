@@ -18,9 +18,12 @@ _counters: dict[str, dict[tuple, int]] = defaultdict(lambda: defaultdict(int))
 _METRIC_HELP = {
     "skill_promote_total": "Total number of skill promotions (by success/failure)",
     "llm_call_total": "Total number of LLM API calls",
-    "llm_call_duration_seconds": "Duration of LLM API calls in seconds",
-    "tdd_loop_duration_seconds": "Duration of TDD loop iterations in seconds",
-    "ws_connections_active": "Active WebSocket connections",
+}
+
+# Per-metric label names (order must match the tuple used in record_* functions).
+_METRIC_LABELS: dict[str, list[str]] = {
+    "skill_promote_total": ["skill_name", "success"],
+    "llm_call_total": ["model", "success"],
 }
 
 
@@ -45,13 +48,10 @@ def get_metrics_text() -> str:
             if help_text:
                 lines.append(f"# HELP {metric_name} {help_text}")
             lines.append(f"# TYPE {metric_name} counter")
+            label_names = _METRIC_LABELS.get(metric_name, [])
             for labels, value in labels_dict.items():
-                # Format labels: (skill_name, success) -> {skill_name="x",success="true"}
-                if labels:
-                    label_parts = []
-                    if len(labels) == 2:
-                        label_parts.append(f'skill_name="{labels[0]}"')
-                        label_parts.append(f'success="{labels[1]}"')
+                if labels and label_names:
+                    label_parts = [f'{name}="{val}"' for name, val in zip(label_names, labels)]
                     label_str = "{" + ",".join(label_parts) + "}"
                 else:
                     label_str = ""
